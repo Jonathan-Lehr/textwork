@@ -1,35 +1,48 @@
 import SwiftUI
+import TextworkEditor
 
 /// Read-only rendered Markdown. This view is not a text editor.
 struct PreviewCard: View {
-    let markdown: String
+    var markdown: String
+    var resourceDirectory: URL?
 
-    var body: some View {
-        ScrollView {
-            Text(rendered)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(28)
-                .textSelection(.enabled)
-        }
-        .background(Color.primary.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.secondary.opacity(0.45), lineWidth: 1)
+    @State private var renderedBody: String
+    @State private var renderTask: Task<Void, Never>?
+
+    init(markdown: String, resourceDirectory: URL? = nil) {
+        self.markdown = markdown
+        self.resourceDirectory = resourceDirectory
+        _renderedBody = State(
+            initialValue: MarkdownHTMLRenderer(imageAddressing: .preview).renderBody(markdown)
         )
-        .padding(16)
-        .accessibilityLabel("Markdown preview")
-        .accessibilityAddTraits(.isStaticText)
     }
 
-    private var rendered: AttributedString {
-        let options = AttributedString.MarkdownParsingOptions(
-            interpretedSyntax: .full,
-            failurePolicy: .returnPartiallyParsedIfPossible
-        )
-        if let parsed = try? AttributedString(markdown: markdown, options: options) {
-            return parsed
+    var body: some View {
+        MarkdownPreviewWebView(bodyHTML: renderedBody, resourceDirectory: resourceDirectory)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.primary.opacity(0.05))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Color.secondary.opacity(0.45), lineWidth: 1)
+            )
+            .padding(16)
+            .accessibilityLabel("Markdown preview")
+            .onChange(of: markdown) { _, newValue in
+                scheduleRender(of: newValue)
+            }
+    }
+
+    private func scheduleRender(of markdown: String) {
+        renderTask?.cancel()
+        renderTask = Task {
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
+            let rendered = await Task.detached(priority: .userInitiated) {
+                MarkdownHTMLRenderer(imageAddressing: .preview).renderBody(markdown)
+            }.value
+            guard !Task.isCancelled else { return }
+            renderedBody = rendered
         }
-        return AttributedString(markdown)
     }
 }
