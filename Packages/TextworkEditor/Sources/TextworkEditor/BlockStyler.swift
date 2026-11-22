@@ -8,32 +8,83 @@ enum BlockStyler {
         lines: [TextLine],
         startLine: Int,
         endLine: Int,
-        kind: StructureKind
-    ) -> [HighlightSpan] {
+        kind: StructureKind,
+        definedLabels: Set<String>
+    ) -> (spans: [HighlightSpan], candidateLabels: [String]) {
         var spans: [HighlightSpan] = []
+        var candidateLabels: [String] = []
         switch kind {
         case .hashHeading(let level):
-            styleHashHeading(bytes: bytes, line: lines[startLine], level: level, into: &spans)
+            styleHashHeading(
+                bytes: bytes,
+                line: lines[startLine],
+                level: level,
+                definedLabels: definedLabels,
+                candidateLabels: &candidateLabels,
+                into: &spans
+            )
         case .underlineHeading(let level):
-            styleUnderlineHeading(bytes: bytes, lines: lines, startLine: startLine, endLine: endLine, level: level, into: &spans)
+            styleUnderlineHeading(
+                bytes: bytes,
+                lines: lines,
+                startLine: startLine,
+                endLine: endLine,
+                level: level,
+                definedLabels: definedLabels,
+                candidateLabels: &candidateLabels,
+                into: &spans
+            )
         case .fence:
             styleFence(bytes: bytes, lines: lines, startLine: startLine, endLine: endLine, into: &spans)
         case .thematic:
             let line = lines[startLine]
             append(line.byteStart..<line.contentByteEnd, role: .thematicBreak, isSyntax: true, bytes: bytes, lines: lines, into: &spans)
         case .quote:
-            styleQuote(bytes: bytes, lines: lines, startLine: startLine, endLine: endLine, into: &spans)
+            styleQuote(
+                bytes: bytes,
+                lines: lines,
+                startLine: startLine,
+                endLine: endLine,
+                definedLabels: definedLabels,
+                candidateLabels: &candidateLabels,
+                into: &spans
+            )
         case .list:
-            styleList(bytes: bytes, line: lines[startLine], into: &spans)
+            styleList(
+                bytes: bytes,
+                line: lines[startLine],
+                definedLabels: definedLabels,
+                candidateLabels: &candidateLabels,
+                into: &spans
+            )
         case .indentedCode:
             styleIndentedCode(bytes: bytes, lines: lines, startLine: startLine, endLine: endLine, into: &spans)
         case .paragraph:
             let range = contentByteRange(lines: lines, startLine: startLine, endLine: endLine)
-            spans.append(contentsOf: InlineStyler.spans(bytes: bytes, range: range, lines: lines))
+            spans.append(contentsOf: InlineStyler.spans(
+                bytes: bytes,
+                range: range,
+                lines: lines,
+                definedLabels: definedLabels,
+                candidateLabels: &candidateLabels
+            ))
         case .table:
-            styleTable(bytes: bytes, lines: lines, startLine: startLine, endLine: endLine, into: &spans)
+            styleTable(
+                bytes: bytes,
+                lines: lines,
+                startLine: startLine,
+                endLine: endLine,
+                definedLabels: definedLabels,
+                candidateLabels: &candidateLabels,
+                into: &spans
+            )
+        case .referenceDefinition:
+            styleReferenceDefinition(bytes: bytes, line: lines[startLine], into: &spans)
+        case .htmlBlock:
+            let range = contentByteRange(lines: lines, startLine: startLine, endLine: endLine)
+            spans.append(contentsOf: InlineStyler.htmlSpans(bytes: bytes, range: range, lines: lines, allowMultilineMarkup: true))
         }
-        return spans
+        return (spans, Array(Set(candidateLabels)).sorted())
     }
 
     static func contentByteRange(lines: [TextLine], startLine: Int, endLine: Int) -> Range<Int> {
@@ -43,14 +94,42 @@ enum BlockStyler {
 }
 
 private enum InlineStyler {
-    static func spans(bytes: [UInt8], range: Range<Int>, lines: [TextLine]) -> [HighlightSpan] {
+    static func spans(
+        bytes: [UInt8],
+        range: Range<Int>,
+        lines: [TextLine],
+        definedLabels: Set<String>,
+        candidateLabels: inout [String]
+    ) -> [HighlightSpan] {
         guard range.lowerBound < range.upperBound else { return [] }
         var raw: [RawSpan] = []
         var mask = ByteMask()
         scanCodeSpans(bytes: bytes, range: range, mask: &mask, into: &raw)
-        scanLinksAndImages(bytes: bytes, range: range, mask: &mask, into: &raw)
+        scanLinksAndImages(
+            bytes: bytes,
+            range: range,
+            mask: &mask,
+            definedLabels: definedLabels,
+            candidateLabels: &candidateLabels,
+            into: &raw
+        )
         scanAutolinks(bytes: bytes, range: range, mask: &mask, into: &raw)
+        scanInlineHTML(bytes: bytes, range: range, mask: &mask, allowMultilineMarkup: false, into: &raw)
         scanEmphasis(bytes: bytes, range: range, mask: mask, into: &raw)
+        return raw.compactMap { $0.span(bytes: bytes, lines: lines) }
+    }
+
+    static func htmlSpans(bytes: [UInt8], range: Range<Int>, lines: [TextLine], allowMultilineMarkup: Bool) -> [HighlightSpan] {
+        guard range.lowerBound < range.upperBound else { return [] }
+        var raw: [RawSpan] = []
+        var mask = ByteMask()
+        scanInlineHTML(
+            bytes: bytes,
+            range: range,
+            mask: &mask,
+            allowMultilineMarkup: allowMultilineMarkup,
+            into: &raw
+        )
         return raw.compactMap { $0.span(bytes: bytes, lines: lines) }
     }
 }
@@ -100,7 +179,14 @@ private struct DelimiterRun {
     var canClose: Bool
 }
 
-private func styleHashHeading(bytes: [UInt8], line: TextLine, level: Int, into spans: inout [HighlightSpan]) {
+private func styleHashHeading(
+    bytes: [UInt8],
+    line: TextLine,
+    level: Int,
+    definedLabels: Set<String>,
+    candidateLabels: inout [String],
+    into spans: inout [HighlightSpan]
+) {
     let role = HighlightRole.heading(level: level)
     let sliceStart = line.byteStart
     let sliceEnd = line.contentByteEnd
@@ -130,7 +216,13 @@ private func styleHashHeading(bytes: [UInt8], line: TextLine, level: Int, into s
     }
     if index < contentEnd {
         append(index..<contentEnd, role: role, isSyntax: false, bytes: bytes, lines: [], lineHint: line, into: &spans)
-        let inline = InlineStyler.spans(bytes: bytes, range: index..<contentEnd, lines: [line])
+        let inline = InlineStyler.spans(
+            bytes: bytes,
+            range: index..<contentEnd,
+            lines: [line],
+            definedLabels: definedLabels,
+            candidateLabels: &candidateLabels
+        )
         spans.append(contentsOf: inline)
     }
 }
@@ -141,6 +233,8 @@ private func styleUnderlineHeading(
     startLine: Int,
     endLine: Int,
     level: Int,
+    definedLabels: Set<String>,
+    candidateLabels: inout [String],
     into spans: inout [HighlightSpan]
 ) {
     let role = HighlightRole.heading(level: level)
@@ -148,7 +242,13 @@ private func styleUnderlineHeading(
     if underline > startLine {
         let content = BlockStyler.contentByteRange(lines: lines, startLine: startLine, endLine: underline)
         append(content, role: role, isSyntax: false, bytes: bytes, lines: lines, into: &spans)
-        spans.append(contentsOf: InlineStyler.spans(bytes: bytes, range: content, lines: lines))
+        spans.append(contentsOf: InlineStyler.spans(
+            bytes: bytes,
+            range: content,
+            lines: lines,
+            definedLabels: definedLabels,
+            candidateLabels: &candidateLabels
+        ))
     }
     let marker = lines[underline]
     append(marker.byteStart..<marker.contentByteEnd, role: role, isSyntax: true, bytes: bytes, lines: lines, into: &spans)
@@ -204,6 +304,8 @@ private func styleQuote(
     lines: [TextLine],
     startLine: Int,
     endLine: Int,
+    definedLabels: Set<String>,
+    candidateLabels: inout [String],
     into spans: inout [HighlightSpan]
 ) {
     for lineIndex in startLine..<endLine {
@@ -226,16 +328,34 @@ private func styleQuote(
                 append(heading.marker, role: heading.role, isSyntax: true, bytes: bytes, lines: lines, into: &spans)
                 if heading.content.lowerBound < heading.content.upperBound {
                     append(heading.content, role: heading.role, isSyntax: false, bytes: bytes, lines: lines, into: &spans)
-                    spans.append(contentsOf: InlineStyler.spans(bytes: bytes, range: heading.content, lines: lines))
+                    spans.append(contentsOf: InlineStyler.spans(
+                        bytes: bytes,
+                        range: heading.content,
+                        lines: lines,
+                        definedLabels: definedLabels,
+                        candidateLabels: &candidateLabels
+                    ))
                 }
             } else {
-                spans.append(contentsOf: InlineStyler.spans(bytes: bytes, range: content, lines: lines))
+                spans.append(contentsOf: InlineStyler.spans(
+                    bytes: bytes,
+                    range: content,
+                    lines: lines,
+                    definedLabels: definedLabels,
+                    candidateLabels: &candidateLabels
+                ))
             }
         }
     }
 }
 
-private func styleList(bytes: [UInt8], line: TextLine, into spans: inout [HighlightSpan]) {
+private func styleList(
+    bytes: [UInt8],
+    line: TextLine,
+    definedLabels: Set<String>,
+    candidateLabels: inout [String],
+    into spans: inout [HighlightSpan]
+) {
     let limit = line.contentByteEnd
     var index = line.byteStart
     index += leadingByteCount(bytes, from: index, to: limit, columnLimit: 3)
@@ -265,7 +385,13 @@ private func styleList(bytes: [UInt8], line: TextLine, into spans: inout [Highli
     }
     append(markerStart..<index, role: .listMarker, isSyntax: true, bytes: bytes, lines: [], lineHint: line, into: &spans)
     if index < limit {
-        spans.append(contentsOf: InlineStyler.spans(bytes: bytes, range: index..<limit, lines: [line]))
+        spans.append(contentsOf: InlineStyler.spans(
+            bytes: bytes,
+            range: index..<limit,
+            lines: [line],
+            definedLabels: definedLabels,
+            candidateLabels: &candidateLabels
+        ))
     }
 }
 
@@ -274,6 +400,8 @@ private func styleTable(
     lines: [TextLine],
     startLine: Int,
     endLine: Int,
+    definedLabels: Set<String>,
+    candidateLabels: inout [String],
     into spans: inout [HighlightSpan]
 ) {
     for lineIndex in startLine..<endLine {
@@ -289,7 +417,13 @@ private func styleTable(
                 append(range, role: .table, isSyntax: true, bytes: bytes, lines: lines, into: &spans)
             case .text(let range):
                 append(range, role: .table, isSyntax: false, bytes: bytes, lines: lines, into: &spans)
-                spans.append(contentsOf: InlineStyler.spans(bytes: bytes, range: range, lines: lines))
+                spans.append(contentsOf: InlineStyler.spans(
+                    bytes: bytes,
+                    range: range,
+                    lines: lines,
+                    definedLabels: definedLabels,
+                    candidateLabels: &candidateLabels
+                ))
             }
         }
     }
@@ -370,6 +504,8 @@ private func scanLinksAndImages(
     bytes: [UInt8],
     range: Range<Int>,
     mask: inout ByteMask,
+    definedLabels: Set<String>,
+    candidateLabels: inout [String],
     into raw: inout [RawSpan]
 ) {
     var index = range.lowerBound
@@ -391,28 +527,126 @@ private func scanLinksAndImages(
             continue
         }
         let afterLabel = labelEnd + 1
-        guard afterLabel < range.upperBound, bytes[afterLabel] == 0x28 else {
-            index += 1
+        if afterLabel < range.upperBound, bytes[afterLabel] == 0x28 {
+            guard let destinationEnd = closingParenthesis(bytes: bytes, from: afterLabel + 1, limit: range.upperBound) else {
+                index += 1
+                continue
+            }
+            appendLinkLabel(
+                bytes: bytes,
+                role: role,
+                markerStart: index,
+                isImage: isImage,
+                bracket: bracket,
+                labelEnd: labelEnd,
+                syntaxEnd: destinationEnd,
+                mask: mask,
+                into: &raw
+            )
+            mask.cover(index..<destinationEnd)
+            index = destinationEnd
             continue
         }
-        guard let destinationEnd = closingParenthesis(bytes: bytes, from: afterLabel + 1, limit: range.upperBound) else {
-            index += 1
+        if let referenceEnd = referenceLinkEnd(
+            bytes: bytes,
+            range: range,
+            bracket: bracket,
+            labelEnd: labelEnd,
+            mask: mask,
+            definedLabels: definedLabels,
+            candidateLabels: &candidateLabels
+        ) {
+            appendLinkLabel(
+                bytes: bytes,
+                role: role,
+                markerStart: index,
+                isImage: isImage,
+                bracket: bracket,
+                labelEnd: labelEnd,
+                syntaxEnd: referenceEnd,
+                mask: mask,
+                into: &raw
+            )
+            mask.cover(index..<referenceEnd)
+            index = referenceEnd
             continue
         }
-        if isImage {
-            raw.append(RawSpan(byteRange: index..<(index + 1), role: role, isSyntax: true))
-        }
-        raw.append(RawSpan(byteRange: bracket..<(bracket + 1), role: role, isSyntax: true))
-        let label = (bracket + 1)..<labelEnd
-        if !label.isEmpty {
-            raw.append(RawSpan(byteRange: label, role: role, isSyntax: false))
-            let labelSpans = emphasisSpans(bytes: bytes, range: label, mask: mask)
-            raw.append(contentsOf: labelSpans)
-        }
-        raw.append(RawSpan(byteRange: labelEnd..<destinationEnd, role: role, isSyntax: true))
-        mask.cover(index..<destinationEnd)
-        index = destinationEnd
+        index += 1
     }
+}
+
+/// Returns the byte just past a defined reference link, and records every label the match depends on.
+private func referenceLinkEnd(
+    bytes: [UInt8],
+    range: Range<Int>,
+    bracket: Int,
+    labelEnd: Int,
+    mask: ByteMask,
+    definedLabels: Set<String>,
+    candidateLabels: inout [String]
+) -> Int? {
+    let linkText = normalizedLabel(bytes: bytes, range: (bracket + 1)..<labelEnd)
+    let afterLabel = labelEnd + 1
+    if afterLabel < range.upperBound, bytes[afterLabel] == 0x5B {
+        let secondStart = afterLabel + 1
+        if secondStart < range.upperBound, bytes[secondStart] == 0x5D {
+            guard !linkText.isEmpty else { return nil }
+            candidateLabels.append(linkText)
+            return definedLabels.contains(linkText) ? secondStart + 1 : nil
+        }
+        guard let secondEnd = closingBracket(bytes: bytes, from: secondStart, limit: range.upperBound, mask: mask) else {
+            guard !linkText.isEmpty else { return nil }
+            candidateLabels.append(linkText)
+            return definedLabels.contains(linkText) ? labelEnd + 1 : nil
+        }
+        let reference = normalizedLabel(bytes: bytes, range: secondStart..<secondEnd)
+        if !reference.isEmpty {
+            candidateLabels.append(reference)
+        }
+        if !linkText.isEmpty {
+            candidateLabels.append(linkText)
+        }
+        if !reference.isEmpty, definedLabels.contains(reference) {
+            return secondEnd + 1
+        }
+        if !linkText.isEmpty, definedLabels.contains(linkText) {
+            return labelEnd + 1
+        }
+        return nil
+    }
+    guard !linkText.isEmpty else { return nil }
+    candidateLabels.append(linkText)
+    return definedLabels.contains(linkText) ? labelEnd + 1 : nil
+}
+
+private func appendLinkLabel(
+    bytes: [UInt8],
+    role: HighlightRole,
+    markerStart: Int,
+    isImage: Bool,
+    bracket: Int,
+    labelEnd: Int,
+    syntaxEnd: Int,
+    mask: ByteMask,
+    into raw: inout [RawSpan]
+) {
+    if isImage {
+        raw.append(RawSpan(byteRange: markerStart..<(markerStart + 1), role: role, isSyntax: true))
+    }
+    raw.append(RawSpan(byteRange: bracket..<(bracket + 1), role: role, isSyntax: true))
+    let label = (bracket + 1)..<labelEnd
+    if !label.isEmpty {
+        raw.append(RawSpan(byteRange: label, role: role, isSyntax: false))
+        raw.append(contentsOf: emphasisSpans(bytes: bytes, range: label, mask: mask))
+    }
+    if syntaxEnd > labelEnd {
+        raw.append(RawSpan(byteRange: labelEnd..<syntaxEnd, role: role, isSyntax: true))
+    }
+}
+
+private func normalizedLabel(bytes: [UInt8], range: Range<Int>) -> String {
+    guard range.upperBound > range.lowerBound else { return "" }
+    return normalizeReferenceLabel(String(decoding: bytes[range], as: UTF8.self))
 }
 
 private func scanAutolinks(bytes: [UInt8], range: Range<Int>, mask: inout ByteMask, into raw: inout [RawSpan]) {
@@ -442,6 +676,189 @@ private func scanAutolinks(bytes: [UInt8], range: Range<Int>, mask: inout ByteMa
             }
         }
         index += DocumentBuffer.scalarWidth(bytes, index).0
+    }
+}
+
+private func scanInlineHTML(
+    bytes: [UInt8],
+    range: Range<Int>,
+    mask: inout ByteMask,
+    allowMultilineMarkup: Bool,
+    into raw: inout [RawSpan]
+) {
+    var index = range.lowerBound
+    while index < range.upperBound {
+        if let end = mask.endOfCover(containing: index) {
+            index = end
+            continue
+        }
+        if bytes[index] == 0x3C, !isEscaped(bytes, index),
+           let markup = htmlMarkup(bytes: bytes, open: index, limit: range.upperBound, allowMultilineMarkup: allowMultilineMarkup) {
+            raw.append(contentsOf: markup.spans)
+            mask.cover(index..<markup.end)
+            index = markup.end
+            continue
+        }
+        index += DocumentBuffer.scalarWidth(bytes, index).0
+    }
+}
+
+private struct HTMLMarkup {
+    var spans: [RawSpan]
+    var end: Int
+}
+
+private func htmlMarkup(bytes: [UInt8], open: Int, limit: Int, allowMultilineMarkup: Bool) -> HTMLMarkup? {
+    guard open + 1 < limit else { return nil }
+    if hasBytes(bytes, at: open, limit: limit, ascii: "<!--") {
+        guard let end = seek(bytes, from: open + 4, limit: limit, ascii: "-->", allowNewline: allowMultilineMarkup) else {
+            return nil
+        }
+        return markup(open: open, delimiter: 4, body: (open + 4)..<end, closer: 3)
+    }
+    if hasBytes(bytes, at: open, limit: limit, ascii: "<![CDATA[") {
+        guard let end = seek(bytes, from: open + 9, limit: limit, ascii: "]]>", allowNewline: allowMultilineMarkup) else {
+            return nil
+        }
+        return markup(open: open, delimiter: 9, body: (open + 9)..<end, closer: 3)
+    }
+    if bytes[open + 1] == 0x3F {
+        guard let end = seek(bytes, from: open + 2, limit: limit, ascii: "?>", allowNewline: allowMultilineMarkup) else {
+            return nil
+        }
+        return markup(open: open, delimiter: 2, body: (open + 2)..<end, closer: 2)
+    }
+    if bytes[open + 1] == 0x21 {
+        let letter = open + 2
+        guard letter < limit, bytes[letter].isASCIILetter else { return nil }
+        guard let end = seekByte(bytes, from: letter, limit: limit, byte: 0x3E, allowNewline: allowMultilineMarkup) else {
+            return nil
+        }
+        return markup(open: open, delimiter: 2, body: (open + 2)..<end, closer: 1)
+    }
+    return htmlTag(bytes: bytes, open: open, limit: limit)
+}
+
+private func htmlTag(bytes: [UInt8], open: Int, limit: Int) -> HTMLMarkup? {
+    var index = open + 1
+    let closingTag = index < limit && bytes[index] == 0x2F
+    if closingTag { index += 1 }
+    let nameStart = index
+    guard index < limit, bytes[index].isASCIILetter else { return nil }
+    index += 1
+    while index < limit {
+        let byte = bytes[index]
+        if byte == 0x0A || byte == 0x0D { return nil }
+        if byte.isASCIILetter || byte.isASCIIDigit || byte == 0x2D {
+            index += 1
+            continue
+        }
+        break
+    }
+    guard index > nameStart else { return nil }
+    let nameEnd = index
+    var quote: UInt8?
+    while index < limit {
+        let byte = bytes[index]
+        if byte == 0x0A || byte == 0x0D { return nil }
+        if let openQuote = quote {
+            if byte == 0x5C, index + 1 < limit, bytes[index + 1] != 0x0A, bytes[index + 1] != 0x0D {
+                index += 2
+                continue
+            }
+            if byte == openQuote { quote = nil }
+            index += 1
+            continue
+        }
+        if byte == 0x22 || byte == 0x27 {
+            quote = byte
+            index += 1
+            continue
+        }
+        if byte == 0x3E {
+            let name = nameStart..<nameEnd
+            var spans: [RawSpan] = []
+            let openerEnd = closingTag ? open + 2 : open + 1
+            spans.append(RawSpan(byteRange: open..<openerEnd, role: .html, isSyntax: true))
+            if !name.isEmpty {
+                spans.append(RawSpan(byteRange: name, role: .html, isSyntax: false))
+            }
+            var closerStart = index
+            if closerStart > nameEnd, bytes[closerStart - 1] == 0x2F {
+                closerStart -= 1
+            }
+            if nameEnd < closerStart {
+                spans.append(RawSpan(byteRange: nameEnd..<closerStart, role: .html, isSyntax: false))
+            }
+            spans.append(RawSpan(byteRange: closerStart..<(index + 1), role: .html, isSyntax: true))
+            return HTMLMarkup(spans: spans, end: index + 1)
+        }
+        index += 1
+    }
+    return nil
+}
+
+private func markup(open: Int, delimiter: Int, body: Range<Int>, closer: Int) -> HTMLMarkup {
+    var spans = [RawSpan(byteRange: open..<(open + delimiter), role: .html, isSyntax: true)]
+    if !body.isEmpty {
+        spans.append(RawSpan(byteRange: body, role: .html, isSyntax: false))
+    }
+    let closerStart = body.upperBound
+    spans.append(RawSpan(byteRange: closerStart..<(closerStart + closer), role: .html, isSyntax: true))
+    return HTMLMarkup(spans: spans, end: closerStart + closer)
+}
+
+private func seek(_ bytes: [UInt8], from start: Int, limit: Int, ascii: String, allowNewline: Bool) -> Int? {
+    let needle = Array(ascii.utf8)
+    guard !needle.isEmpty else { return nil }
+    var index = start
+    while index + needle.count <= limit {
+        if !allowNewline, bytes[index] == 0x0A || bytes[index] == 0x0D { return nil }
+        if Array(bytes[index..<(index + needle.count)]) == needle {
+            return index
+        }
+        index += 1
+    }
+    return nil
+}
+
+private func seekByte(_ bytes: [UInt8], from start: Int, limit: Int, byte: UInt8, allowNewline: Bool) -> Int? {
+    var index = start
+    while index < limit {
+        if !allowNewline, bytes[index] == 0x0A || bytes[index] == 0x0D { return nil }
+        if bytes[index] == byte { return index }
+        index += 1
+    }
+    return nil
+}
+
+private func hasBytes(_ bytes: [UInt8], at index: Int, limit: Int, ascii: String) -> Bool {
+    let prefix = Array(ascii.utf8)
+    guard index + prefix.count <= limit else { return false }
+    return Array(bytes[index..<(index + prefix.count)]) == prefix
+}
+
+private func styleReferenceDefinition(bytes: [UInt8], line: TextLine, into spans: inout [HighlightSpan]) {
+    guard let parsed = ReferenceDefinitionParser.parseLine(bytes: bytes, line: line) else { return }
+    append(parsed.openingBracket..<(parsed.openingBracket + 1), role: .link, isSyntax: true, bytes: bytes, lines: [], lineHint: line, into: &spans)
+    append(parsed.label, role: .link, isSyntax: false, bytes: bytes, lines: [], lineHint: line, into: &spans)
+    append(parsed.closingBracket..<(parsed.closingBracket + 1), role: .link, isSyntax: true, bytes: bytes, lines: [], lineHint: line, into: &spans)
+    append(parsed.colon..<(parsed.colon + 1), role: .link, isSyntax: true, bytes: bytes, lines: [], lineHint: line, into: &spans)
+    if let opening = parsed.destinationOpening {
+        append(opening..<(opening + 1), role: .link, isSyntax: true, bytes: bytes, lines: [], lineHint: line, into: &spans)
+    }
+    append(parsed.destination, role: .link, isSyntax: false, bytes: bytes, lines: [], lineHint: line, into: &spans)
+    if let closing = parsed.destinationClosing {
+        append(closing..<(closing + 1), role: .link, isSyntax: true, bytes: bytes, lines: [], lineHint: line, into: &spans)
+    }
+    if let opening = parsed.titleOpening {
+        append(opening..<(opening + 1), role: .link, isSyntax: true, bytes: bytes, lines: [], lineHint: line, into: &spans)
+    }
+    if let title = parsed.title, !title.isEmpty {
+        append(title, role: .link, isSyntax: false, bytes: bytes, lines: [], lineHint: line, into: &spans)
+    }
+    if let closing = parsed.titleClosing {
+        append(closing..<(closing + 1), role: .link, isSyntax: true, bytes: bytes, lines: [], lineHint: line, into: &spans)
     }
 }
 

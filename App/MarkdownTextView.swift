@@ -1,6 +1,24 @@
 import SwiftUI
 import TextworkEditor
 
+private func clampedRange(_ range: Range<Int>, length: Int) -> NSRange? {
+    let lower = max(0, range.lowerBound)
+    let upper = min(length, range.upperBound)
+    guard upper > lower else { return nil }
+    return NSRange(location: lower, length: upper - lower)
+}
+
+private func clippedRanges(of span: HighlightSpan, limits: [Range<Int>], length: Int) -> [NSRange] {
+    var pieces: [NSRange] = []
+    for limit in limits {
+        let lower = max(0, max(span.startUTF16, limit.lowerBound))
+        let upper = min(length, min(span.endUTF16, limit.upperBound))
+        guard upper > lower else { continue }
+        pieces.append(NSRange(location: lower, length: upper - lower))
+    }
+    return pieces
+}
+
 #if os(macOS)
 import AppKit
 
@@ -16,6 +34,7 @@ struct MarkdownTextEditor: NSViewRepresentable {
         let textView = NSTextView(usingTextLayoutManager: true)
         configuration.apply(to: textView)
         textView.textStorage?.delegate = context.coordinator
+        context.coordinator.textView = textView
 
         let scrollView = NSScrollView()
         scrollView.hasVerticalScroller = true
@@ -28,6 +47,7 @@ struct MarkdownTextEditor: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
+        context.coordinator.textView = textView
         if context.coordinator.configuration != configuration {
             context.coordinator.configuration = configuration
             configuration.apply(to: textView)
@@ -43,6 +63,7 @@ struct MarkdownTextEditor: NSViewRepresentable {
         var configuration: EditorConfiguration
         var snapshot: HighlightSnapshot
         var isApplyingHighlight = false
+        weak var textView: NSTextView?
 
         init(text: Binding<String>, configuration: EditorConfiguration) {
             _text = text
@@ -53,7 +74,8 @@ struct MarkdownTextEditor: NSViewRepresentable {
         @MainActor
         func repaint(in textView: NSTextView) {
             guard let storage = textView.textStorage else { return }
-            paint(snapshot.spans, in: storage)
+            let full = 0..<storage.length
+            paint(snapshot.spans, ranges: storage.length > 0 ? [full] : [], in: storage, textView: textView)
         }
 
         @MainActor
@@ -62,7 +84,7 @@ struct MarkdownTextEditor: NSViewRepresentable {
             isApplyingHighlight = true
             storage.setAttributedString(NSAttributedString(string: replacement))
             snapshot = highlighter.highlight(replacement)
-            paint(snapshot.spans, in: storage)
+            paint(snapshot.spans, ranges: snapshot.invalidatedUTF16Ranges, in: storage, textView: textView)
             isApplyingHighlight = false
         }
 
@@ -80,20 +102,39 @@ struct MarkdownTextEditor: NSViewRepresentable {
             let replacement = (textStorage.string as NSString).substring(with: editedRange)
             snapshot = highlighter.apply(MarkdownEdit(range: oldRange, replacement: replacement), to: snapshot)
             isApplyingHighlight = true
-            paint(snapshot.spans, in: textStorage)
+            paint(snapshot.spans, ranges: snapshot.invalidatedUTF16Ranges, in: textStorage, textView: textView)
             isApplyingHighlight = false
             text = textStorage.string
         }
 
-        private func paint(_ spans: [HighlightSpan], in storage: NSTextStorage) {
-            let fullRange = NSRange(location: 0, length: storage.length)
-            storage.beginEditing()
-            storage.setAttributes(configuration.baseAttributes(), range: fullRange)
-            for span in spans where !span.isSyntax {
-                HighlightColors.applyContent(span, configuration: configuration, to: storage)
+        private func paint(
+            _ spans: [HighlightSpan],
+            ranges: [Range<Int>],
+            in storage: NSTextStorage,
+            textView: NSTextView?
+        ) {
+            let undoManager = textView?.undoManager
+            undoManager?.disableUndoRegistration()
+            defer {
+                undoManager?.enableUndoRegistration()
+                textView?.typingAttributes = configuration.baseAttributes()
             }
-            for span in spans where span.isSyntax {
-                HighlightColors.applySyntax(span, configuration: configuration, to: storage)
+            guard !ranges.isEmpty else { return }
+            let affected = spans.filter { span in
+                ranges.contains { limit in
+                    limit.lowerBound < span.endUTF16 && span.startUTF16 < limit.upperBound
+                }
+            }
+            storage.beginEditing()
+            for range in ranges {
+                guard let nsRange = clampedRange(range, length: storage.length) else { continue }
+                storage.setAttributes(configuration.baseAttributes(), range: nsRange)
+            }
+            for span in affected where !span.isSyntax {
+                HighlightColors.applyContent(span, configuration: configuration, to: storage, limits: ranges)
+            }
+            for span in affected where span.isSyntax {
+                HighlightColors.applySyntax(span, configuration: configuration, to: storage, limits: ranges)
             }
             storage.endEditing()
         }
@@ -103,14 +144,26 @@ struct MarkdownTextEditor: NSViewRepresentable {
 private enum HighlightColors {
     static var syntax: NSColor { NSColor.tertiaryLabelColor }
     static var link: NSColor { NSColor.linkColor }
+    static var html: NSColor { NSColor.systemTeal }
     static var codeBackground: NSColor { NSColor.quaternaryLabelColor.withAlphaComponent(0.35) }
 
     static func applyContent(
         _ span: HighlightSpan,
         configuration: EditorConfiguration,
-        to storage: NSTextStorage
+        to storage: NSTextStorage,
+        limits: [Range<Int>]
     ) {
-        guard let range = nsRange(span, length: storage.length) else { return }
+        for range in clippedRanges(of: span, limits: limits, length: storage.length) {
+            applyContent(span, configuration: configuration, to: storage, range: range)
+        }
+    }
+
+    static func applyContent(
+        _ span: HighlightSpan,
+        configuration: EditorConfiguration,
+        to storage: NSTextStorage,
+        range: NSRange
+    ) {
         var font = (storage.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont) ?? configuration.bodyFont()
         let manager = NSFontManager.shared
         switch span.role {
@@ -127,6 +180,9 @@ private enum HighlightColors {
         case .link, .image:
             storage.addAttribute(.foregroundColor, value: link, range: range)
             storage.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+        case .html:
+            font = configuration.monospacedFont()
+            storage.addAttribute(.foregroundColor, value: html, range: range)
         case .table, .listMarker, .blockQuote, .thematicBreak:
             break
         }
@@ -136,13 +192,15 @@ private enum HighlightColors {
     static func applySyntax(
         _ span: HighlightSpan,
         configuration: EditorConfiguration,
-        to storage: NSTextStorage
+        to storage: NSTextStorage,
+        limits: [Range<Int>]
     ) {
-        guard let range = nsRange(span, length: storage.length) else { return }
-        storage.addAttributes(
-            [.font: configuration.bodyFont(), .foregroundColor: syntax],
-            range: range
-        )
+        for range in clippedRanges(of: span, limits: limits, length: storage.length) {
+            storage.addAttributes(
+                [.font: configuration.bodyFont(), .foregroundColor: syntax],
+                range: range
+            )
+        }
     }
 
     static func headingBoost(_ role: HighlightRole) -> CGFloat {
@@ -153,11 +211,6 @@ private enum HighlightColors {
         case .heading4: 2
         default: 1
         }
-    }
-
-    static func nsRange(_ span: HighlightSpan, length: Int) -> NSRange? {
-        guard span.startUTF16 >= 0, span.endUTF16 <= length, span.endUTF16 > span.startUTF16 else { return nil }
-        return NSRange(location: span.startUTF16, length: span.endUTF16 - span.startUTF16)
     }
 }
 
@@ -176,11 +229,13 @@ struct MarkdownTextEditor: UIViewRepresentable {
         let textView = UITextView(usingTextLayoutManager: true)
         configuration.apply(to: textView)
         textView.textStorage.delegate = context.coordinator
+        context.coordinator.textView = textView
         context.coordinator.replaceAll(text, in: textView)
         return textView
     }
 
     func updateUIView(_ textView: UITextView, context: Context) {
+        context.coordinator.textView = textView
         if context.coordinator.configuration != configuration {
             context.coordinator.configuration = configuration
             configuration.apply(to: textView)
@@ -196,6 +251,7 @@ struct MarkdownTextEditor: UIViewRepresentable {
         var configuration: EditorConfiguration
         var snapshot: HighlightSnapshot
         var isApplyingHighlight = false
+        weak var textView: UITextView?
 
         init(text: Binding<String>, configuration: EditorConfiguration) {
             _text = text
@@ -205,7 +261,9 @@ struct MarkdownTextEditor: UIViewRepresentable {
 
         @MainActor
         func repaint(in textView: UITextView) {
-            paint(snapshot.spans, in: textView.textStorage)
+            let storage = textView.textStorage
+            let full = 0..<storage.length
+            paint(snapshot.spans, ranges: storage.length > 0 ? [full] : [], in: storage, textView: textView)
         }
 
         @MainActor
@@ -214,7 +272,7 @@ struct MarkdownTextEditor: UIViewRepresentable {
             isApplyingHighlight = true
             storage.setAttributedString(NSAttributedString(string: replacement))
             snapshot = highlighter.highlight(replacement)
-            paint(snapshot.spans, in: storage)
+            paint(snapshot.spans, ranges: snapshot.invalidatedUTF16Ranges, in: storage, textView: textView)
             isApplyingHighlight = false
         }
 
@@ -231,20 +289,39 @@ struct MarkdownTextEditor: UIViewRepresentable {
             let replacement = (textStorage.string as NSString).substring(with: editedRange)
             snapshot = highlighter.apply(MarkdownEdit(range: oldRange, replacement: replacement), to: snapshot)
             isApplyingHighlight = true
-            paint(snapshot.spans, in: textStorage)
+            paint(snapshot.spans, ranges: snapshot.invalidatedUTF16Ranges, in: textStorage, textView: textView)
             isApplyingHighlight = false
             text = textStorage.string
         }
 
-        private func paint(_ spans: [HighlightSpan], in storage: NSTextStorage) {
-            let fullRange = NSRange(location: 0, length: storage.length)
-            storage.beginEditing()
-            storage.setAttributes(configuration.baseAttributes(), range: fullRange)
-            for span in spans where !span.isSyntax {
-                HighlightColors.applyContent(span, configuration: configuration, to: storage)
+        private func paint(
+            _ spans: [HighlightSpan],
+            ranges: [Range<Int>],
+            in storage: NSTextStorage,
+            textView: UITextView?
+        ) {
+            let undoManager = textView?.undoManager
+            undoManager?.disableUndoRegistration()
+            defer {
+                undoManager?.enableUndoRegistration()
+                textView?.typingAttributes = configuration.baseAttributes()
             }
-            for span in spans where span.isSyntax {
-                HighlightColors.applySyntax(span, configuration: configuration, to: storage)
+            guard !ranges.isEmpty else { return }
+            let affected = spans.filter { span in
+                ranges.contains { limit in
+                    limit.lowerBound < span.endUTF16 && span.startUTF16 < limit.upperBound
+                }
+            }
+            storage.beginEditing()
+            for range in ranges {
+                guard let nsRange = clampedRange(range, length: storage.length) else { continue }
+                storage.setAttributes(configuration.baseAttributes(), range: nsRange)
+            }
+            for span in affected where !span.isSyntax {
+                HighlightColors.applyContent(span, configuration: configuration, to: storage, limits: ranges)
+            }
+            for span in affected where span.isSyntax {
+                HighlightColors.applySyntax(span, configuration: configuration, to: storage, limits: ranges)
             }
             storage.endEditing()
         }
@@ -254,14 +331,26 @@ struct MarkdownTextEditor: UIViewRepresentable {
 private enum HighlightColors {
     static var syntax: UIColor { UIColor.tertiaryLabel }
     static var link: UIColor { UIColor.link }
+    static var html: UIColor { UIColor.systemTeal }
     static var codeBackground: UIColor { UIColor.tertiarySystemFill }
 
     static func applyContent(
         _ span: HighlightSpan,
         configuration: EditorConfiguration,
-        to storage: NSTextStorage
+        to storage: NSTextStorage,
+        limits: [Range<Int>]
     ) {
-        guard let range = nsRange(span, length: storage.length) else { return }
+        for range in clippedRanges(of: span, limits: limits, length: storage.length) {
+            applyContent(span, configuration: configuration, to: storage, range: range)
+        }
+    }
+
+    static func applyContent(
+        _ span: HighlightSpan,
+        configuration: EditorConfiguration,
+        to storage: NSTextStorage,
+        range: NSRange
+    ) {
         var font = (storage.attribute(.font, at: range.location, effectiveRange: nil) as? UIFont) ?? configuration.bodyFont()
         switch span.role {
         case .heading1, .heading2, .heading3, .heading4, .heading5, .heading6:
@@ -277,6 +366,9 @@ private enum HighlightColors {
         case .link, .image:
             storage.addAttribute(.foregroundColor, value: link, range: range)
             storage.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+        case .html:
+            font = configuration.monospacedFont()
+            storage.addAttribute(.foregroundColor, value: html, range: range)
         case .table, .listMarker, .blockQuote, .thematicBreak:
             break
         }
@@ -286,13 +378,15 @@ private enum HighlightColors {
     static func applySyntax(
         _ span: HighlightSpan,
         configuration: EditorConfiguration,
-        to storage: NSTextStorage
+        to storage: NSTextStorage,
+        limits: [Range<Int>]
     ) {
-        guard let range = nsRange(span, length: storage.length) else { return }
-        storage.addAttributes(
-            [.font: configuration.bodyFont(), .foregroundColor: syntax],
-            range: range
-        )
+        for range in clippedRanges(of: span, limits: limits, length: storage.length) {
+            storage.addAttributes(
+                [.font: configuration.bodyFont(), .foregroundColor: syntax],
+                range: range
+            )
+        }
     }
 
     static func adding(_ trait: UIFontDescriptor.SymbolicTraits, to font: UIFont) -> UIFont {
@@ -312,9 +406,5 @@ private enum HighlightColors {
         }
     }
 
-    static func nsRange(_ span: HighlightSpan, length: Int) -> NSRange? {
-        guard span.startUTF16 >= 0, span.endUTF16 <= length, span.endUTF16 > span.startUTF16 else { return nil }
-        return NSRange(location: span.startUTF16, length: span.endUTF16 - span.startUTF16)
-    }
 }
 #endif

@@ -24,6 +24,18 @@ struct MarkdownTableCell {
     var inlines: [MarkdownInline]
 }
 
+struct UnresolvedReference {
+    /// Labels in priority order. The first one present in the definition map wins.
+    var labels: [String]
+    /// Literal text that follows the link when the label at the same index matches.
+    /// A full reference that misses falls back to a shortcut and leaves `[label]` behind.
+    var trailingAfterMatch: [String]
+    var children: [MarkdownInline]
+    var isImage: Bool
+    var opening: String
+    var closing: String
+}
+
 enum MarkdownInline {
     case text(String)
     case softBreak
@@ -33,12 +45,25 @@ enum MarkdownInline {
     case strong(children: [MarkdownInline])
     case link(destination: String, title: String?, children: [MarkdownInline])
     case image(destination: String, alternativeText: String)
+    case unresolvedReference(UnresolvedReference)
 }
 
 enum MarkdownHTMLParser {
     static func blocks(in markdown: String) -> [MarkdownBlock] {
-        var parser = BlockParser(lines: splitLines(markdown))
-        return parser.parseDocument()
+        let definitions = ReferenceDefinitionMap()
+        var parser = BlockParser(lines: splitLines(markdown), definitions: definitions)
+        let blocks = parser.parseBlocks(until: parser.lines.count)
+        return resolveReferences(in: blocks, definitions: definitions)
+    }
+}
+
+final class ReferenceDefinitionMap {
+    var values: [String: (destination: String, title: String?)] = [:]
+
+    func add(label: String, destination: String, title: String?) {
+        let key = normalizeReferenceLabel(label)
+        guard !key.isEmpty, values[key] == nil else { return }
+        values[key] = (destination, title)
     }
 }
 
@@ -51,10 +76,7 @@ enum MarkdownInlineParser {
 private struct BlockParser {
     var lines: [String]
     var index = 0
-
-    mutating func parseDocument() -> [MarkdownBlock] {
-        parseBlocks(until: lines.count)
-    }
+    var definitions: ReferenceDefinitionMap
 
     mutating func parseBlocks(until end: Int) -> [MarkdownBlock] {
         var blocks: [MarkdownBlock] = []
@@ -64,6 +86,9 @@ private struct BlockParser {
                 index += 1
             }
             if index >= end { break }
+            if takeReferenceDefinition() {
+                continue
+            }
             if let fence = takeFence(until: end) {
                 blocks.append(fence)
             } else if let heading = takeATXHeading() {
@@ -164,7 +189,7 @@ private struct BlockParser {
             }
             break
         }
-        let children = MarkdownHTMLParser.blocks(in: inner.joined(separator: "\n"))
+        let children = parseNested(inner.joined(separator: "\n"))
         return .blockQuote(children: children)
     }
 
@@ -229,7 +254,7 @@ private struct BlockParser {
                 }
                 break
             }
-            let children = MarkdownHTMLParser.blocks(in: itemLines.joined(separator: "\n"))
+            let children = parseNested(itemLines.joined(separator: "\n"))
             items.append(MarkdownListItem(checked: checked, children: children))
         }
         return .list(orderedStart: ordered ? startNumber : nil, tight: !loose, items: items)
@@ -277,6 +302,18 @@ private struct BlockParser {
             index += 1
         }
         return .paragraph(inlines: MarkdownInlineParser.parse(collected.joined(separator: "\n")))
+    }
+
+    mutating func takeReferenceDefinition() -> Bool {
+        guard let parsed = parseReferenceDefinition(lines[index]) else { return false }
+        definitions.add(label: parsed.label, destination: parsed.destination, title: parsed.title)
+        index += 1
+        return true
+    }
+
+    func parseNested(_ source: String) -> [MarkdownBlock] {
+        var parser = BlockParser(lines: splitLines(source), definitions: definitions)
+        return parser.parseBlocks(until: parser.lines.count)
     }
 }
 
@@ -754,6 +791,206 @@ private func tableDelimiter(_ line: String) -> [MarkdownTableAlignment]? {
     return alignments
 }
 
+private struct ParsedReferenceDefinition {
+    var label: String
+    var destination: String
+    var title: String?
+}
+
+private func parseReferenceDefinition(_ line: String) -> ParsedReferenceDefinition? {
+    let indent = leadingColumnCount(line)
+    if indent > 3 { return nil }
+    var content = stripColumns(line, indent)
+    guard content.first == "[" else { return nil }
+    content.removeFirst()
+    guard let closing = unescapedDelimiter(in: content, matching: "]") else { return nil }
+    let rawLabel = String(content[..<closing])
+    guard acceptableReferenceLabel(rawLabel) else { return nil }
+    content = String(content[content.index(after: closing)...])
+    guard content.first == ":" else { return nil }
+    content.removeFirst()
+    content = trimHorizontalSpace(content)
+    guard !content.isEmpty else { return nil }
+
+    var destination = ""
+    if content.first == "<" {
+        content.removeFirst()
+        guard let end = unescapedDelimiter(in: content, matching: ">") else { return nil }
+        let wrapped = String(content[..<end])
+        if wrapped.contains("<") || wrapped.contains("\n") { return nil }
+        destination = unescapeMarkdown(wrapped)
+        content = String(content[content.index(after: end)...])
+    } else {
+        var depth = 0
+        var value = ""
+        var index = content.startIndex
+        while index < content.endIndex {
+            let character = content[index]
+            if character == "\\" {
+                let next = content.index(after: index)
+                guard next < content.endIndex else { return nil }
+                value.append(content[next])
+                index = content.index(after: next)
+                continue
+            }
+            if character == " " || character == "\t" { break }
+            if character == "(" {
+                depth += 1
+            } else if character == ")" {
+                if depth == 0 { break }
+                depth -= 1
+            }
+            value.append(character)
+            index = content.index(after: index)
+        }
+        guard !value.isEmpty, depth == 0 else { return nil }
+        destination = value
+        content = String(content[index...])
+    }
+
+    content = trimHorizontalSpace(content)
+    var title: String?
+    if let marker = content.first, marker == "\"" || marker == "'" || marker == "(" {
+        let closingMarker: Character = marker == "(" ? ")" : marker
+        content.removeFirst()
+        guard let end = unescapedDelimiter(in: content, matching: closingMarker) else { return nil }
+        title = unescapeMarkdown(String(content[..<end]))
+        content = String(content[content.index(after: end)...])
+        content = trimHorizontalSpace(content)
+    }
+    guard content.isEmpty else { return nil }
+    return ParsedReferenceDefinition(label: rawLabel, destination: destination, title: title)
+}
+
+private func acceptableReferenceLabel(_ label: String) -> Bool {
+    guard label.count <= 999, !normalizeReferenceLabel(label).isEmpty else { return false }
+    var escaped = false
+    for character in label {
+        if escaped {
+            escaped = false
+            continue
+        }
+        if character == "\\" {
+            escaped = true
+            continue
+        }
+        if character == "[" || character == "]" { return false }
+    }
+    return true
+}
+
+private func unescapedDelimiter(in text: String, matching target: Character) -> String.Index? {
+    var escaped = false
+    var index = text.startIndex
+    while index < text.endIndex {
+        let character = text[index]
+        if escaped {
+            escaped = false
+            index = text.index(after: index)
+            continue
+        }
+        if character == "\\" {
+            escaped = true
+            index = text.index(after: index)
+            continue
+        }
+        if character == target { return index }
+        index = text.index(after: index)
+    }
+    return nil
+}
+
+private func trimHorizontalSpace(_ text: String) -> String {
+    var result = text
+    while result.first == " " || result.first == "\t" { result.removeFirst() }
+    while result.last == " " || result.last == "\t" { result.removeLast() }
+    return result
+}
+
+private func unescapeMarkdown(_ text: String) -> String {
+    var result = ""
+    var escaped = false
+    for character in text {
+        if escaped {
+            result.append(character)
+            escaped = false
+            continue
+        }
+        if character == "\\" {
+            escaped = true
+            continue
+        }
+        result.append(character)
+    }
+    if escaped { result.append("\\") }
+    return result
+}
+
+private func resolveReferences(in blocks: [MarkdownBlock], definitions: ReferenceDefinitionMap) -> [MarkdownBlock] {
+    blocks.map { resolveBlock($0, definitions: definitions) }
+}
+
+private func resolveBlock(_ block: MarkdownBlock, definitions: ReferenceDefinitionMap) -> MarkdownBlock {
+    switch block {
+    case .heading(let level, let inlines):
+        return .heading(level: level, inlines: resolveInlines(inlines, definitions: definitions))
+    case .paragraph(let inlines):
+        return .paragraph(inlines: resolveInlines(inlines, definitions: definitions))
+    case .codeBlock:
+        return block
+    case .blockQuote(let children):
+        return .blockQuote(children: resolveReferences(in: children, definitions: definitions))
+    case .list(let orderedStart, let tight, let items):
+        let resolved = items.map { item in
+            MarkdownListItem(
+                checked: item.checked,
+                children: resolveReferences(in: item.children, definitions: definitions)
+            )
+        }
+        return .list(orderedStart: orderedStart, tight: tight, items: resolved)
+    case .table(let alignments, let header, let rows):
+        let resolvedHeader = header.map { MarkdownTableCell(inlines: resolveInlines($0.inlines, definitions: definitions)) }
+        let resolvedRows = rows.map { row in
+            row.map { MarkdownTableCell(inlines: resolveInlines($0.inlines, definitions: definitions)) }
+        }
+        return .table(alignments: alignments, header: resolvedHeader, rows: resolvedRows)
+    case .thematicBreak:
+        return block
+    }
+}
+
+private func resolveInlines(_ inlines: [MarkdownInline], definitions: ReferenceDefinitionMap) -> [MarkdownInline] {
+    inlines.flatMap { resolveInline($0, definitions: definitions) }
+}
+
+private func resolveInline(_ inline: MarkdownInline, definitions: ReferenceDefinitionMap) -> [MarkdownInline] {
+    switch inline {
+    case .unresolvedReference(let match):
+        let children = resolveInlines(match.children, definitions: definitions)
+        for (index, label) in match.labels.enumerated() where definitions.values[label] != nil {
+            let defined = definitions.values[label]!
+            let trailing = index < match.trailingAfterMatch.count ? match.trailingAfterMatch[index] : ""
+            let linked: MarkdownInline
+            if match.isImage {
+                linked = .image(destination: defined.destination, alternativeText: plainText(children))
+            } else {
+                linked = .link(destination: defined.destination, title: defined.title, children: children)
+            }
+            if trailing.isEmpty { return [linked] }
+            return [linked, .text(trailing)]
+        }
+        return [.text(match.opening)] + children + [.text(match.closing)]
+    case .emphasis(let children):
+        return [.emphasis(children: resolveInlines(children, definitions: definitions))]
+    case .strong(let children):
+        return [.strong(children: resolveInlines(children, definitions: definitions))]
+    case .link(let destination, let title, let children):
+        return [.link(destination: destination, title: title, children: resolveInlines(children, definitions: definitions))]
+    case .text, .softBreak, .hardBreak, .code, .image:
+        return [inline]
+    }
+}
+
 private enum InlinePiece {
     case text(String)
     case softBreak
@@ -761,6 +998,7 @@ private enum InlinePiece {
     case code(String)
     case image(destination: String, alternativeText: String)
     case link(destination: String, title: String?, children: [MarkdownInline])
+    case unresolvedReference(UnresolvedReference)
     case emphasis([InlinePiece])
     case strong([InlinePiece])
     case delimiter(marker: Character, count: Int, canOpen: Bool, canClose: Bool)
@@ -927,7 +1165,9 @@ private struct InlineParser {
         let labelStart = text.index(after: index)
         guard let labelEnd = closingBracket(from: labelStart) else { return nil }
         let afterLabel = text.index(after: labelEnd)
-        guard afterLabel < text.endIndex, text[afterLabel] == "(" else { return nil }
+        if afterLabel >= text.endIndex || text[afterLabel] != "(" {
+            return reference(from: labelStart, labelEnd: labelEnd, image: image)
+        }
         guard let destination = destination(from: text.index(after: afterLabel)) else { return nil }
         let label = String(text[labelStart..<labelEnd])
         if image {
@@ -936,6 +1176,57 @@ private struct InlineParser {
         }
         let children = InlineParser(text: label).parse(allowLinks: false)
         return (.link(destination: destination.value, title: destination.title, children: children), destination.end)
+    }
+
+    func reference(from labelStart: String.Index, labelEnd: String.Index, image: Bool) -> (piece: InlinePiece, next: String.Index)? {
+        let rawLabel = String(text[labelStart..<labelEnd])
+        guard acceptableReferenceLabel(rawLabel) else { return nil }
+        let shortcut = normalizeReferenceLabel(rawLabel)
+        let afterLabel = text.index(after: labelEnd)
+        let opening = image ? "![" : "["
+        let children = InlineParser(text: rawLabel).parse(allowLinks: false)
+
+        if afterLabel < text.endIndex, text[afterLabel] == "[" {
+            let secondStart = text.index(after: afterLabel)
+            if secondStart < text.endIndex, text[secondStart] == "]" {
+                let end = text.index(after: secondStart)
+                let match = UnresolvedReference(
+                    labels: [shortcut],
+                    trailingAfterMatch: [""],
+                    children: children,
+                    isImage: image,
+                    opening: opening,
+                    closing: "][]"
+                )
+                return (.unresolvedReference(match), end)
+            }
+            if let secondEnd = closingBracket(from: secondStart) {
+                let referenceRaw = String(text[secondStart..<secondEnd])
+                if acceptableReferenceLabel(referenceRaw) {
+                    let end = text.index(after: secondEnd)
+                    let secondLiteral = String(text[afterLabel..<end])
+                    let match = UnresolvedReference(
+                        labels: [normalizeReferenceLabel(referenceRaw), shortcut],
+                        trailingAfterMatch: ["", secondLiteral],
+                        children: children,
+                        isImage: image,
+                        opening: opening,
+                        closing: "]" + secondLiteral
+                    )
+                    return (.unresolvedReference(match), end)
+                }
+            }
+        }
+
+        let match = UnresolvedReference(
+            labels: [shortcut],
+            trailingAfterMatch: [""],
+            children: children,
+            isImage: image,
+            opening: opening,
+            closing: "]"
+        )
+        return (.unresolvedReference(match), afterLabel)
     }
 
     func closingBracket(from start: String.Index) -> String.Index? {
@@ -1154,6 +1445,8 @@ private struct InlineParser {
                 return .image(destination: destination, alternativeText: alternativeText)
             case .link(let destination, let title, let children):
                 return .link(destination: destination, title: title, children: children)
+            case .unresolvedReference(let match):
+                return .unresolvedReference(match)
             case .emphasis(let children):
                 return .emphasis(children: finalize(children))
             case .strong(let children):
@@ -1180,6 +1473,8 @@ private func plainText(_ inlines: [MarkdownInline]) -> String {
             return plainText(children)
         case .image(_, let alternativeText):
             return alternativeText
+        case .unresolvedReference(let match):
+            return match.opening + plainText(match.children) + match.closing
         }
     }.joined()
 }

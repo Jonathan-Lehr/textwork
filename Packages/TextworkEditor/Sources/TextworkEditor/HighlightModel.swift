@@ -21,6 +21,7 @@ public enum HighlightRole: String, Codable, Sendable, Equatable, CaseIterable {
     case blockQuote
     case thematicBreak
     case table
+    case html
 
     public static func heading(level: Int) -> HighlightRole {
         switch level {
@@ -94,10 +95,18 @@ public struct HighlightStatistics: Codable, Sendable, Equatable {
 public struct HighlightSnapshot: Sendable, Equatable {
     public var spans: [HighlightSpan]
     public var statistics: HighlightStatistics
+    /// UTF-16 ranges whose attributes can differ from the previous paint.
+    ///
+    /// A full highlight covers the document. A keystroke covers the restyled
+    /// blocks, any block whose reference-link resolution changed, and the
+    /// characters the edit inserted. Suffix blocks that were only shifted are
+    /// omitted: AppKit and UIKit move their attributes with the text.
+    public var invalidatedUTF16Ranges: [Range<Int>]
 
     var bytes: [UInt8]
     var lines: [TextLine]
     var blocks: [StyledBlock]
+    var definedReferenceLabels: Set<String>
 
     public var utf16Count: Int {
         guard let last = lines.last else { return 0 }

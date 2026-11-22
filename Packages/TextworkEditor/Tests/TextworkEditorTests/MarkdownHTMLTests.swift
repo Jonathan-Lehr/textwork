@@ -69,6 +69,45 @@ final class MarkdownHTMLTests: XCTestCase {
         XCTAssertTrue(preview.renderBody("![Alt](<my figure.png>)").contains("my%20figure.png"))
     }
 
+    func testReferenceLinksResolveAndDefinitionsStayOutOfTheBody() {
+        XCTAssertEqual(
+            body("[example]: https://example.com\n\n[Example]"),
+            "<p><a href=\"https://example.com\">Example</a></p>"
+        )
+        XCTAssertEqual(
+            body("[example]: https://example.com \"Title\"\n\n[text][example]"),
+            "<p><a href=\"https://example.com\" title=\"Title\">text</a></p>"
+        )
+        XCTAssertEqual(
+            body("[example]: https://example.com\n\n[Example][]"),
+            "<p><a href=\"https://example.com\">Example</a></p>"
+        )
+        XCTAssertEqual(
+            body("[Example]\n\n[example]: https://example.com"),
+            "<p><a href=\"https://example.com\">Example</a></p>"
+        )
+        XCTAssertEqual(body("[Example]"), "<p>[Example]</p>")
+        XCTAssertEqual(body("[example]: https://example.com"), "")
+        XCTAssertEqual(
+            body("[foo bar]: /url\n\n[Foo   Bar]"),
+            "<p><a href=\"/url\">Foo   Bar</a></p>"
+        )
+        XCTAssertEqual(
+            body("[id]: /url\n\n[*em*][id]"),
+            "<p><a href=\"/url\"><em>em</em></a></p>"
+        )
+        XCTAssertEqual(
+            body("[fig]: images/figure.png\n\n![Alt][fig]"),
+            "<p><img src=\"images/figure.png\" alt=\"Alt\"></p>"
+        )
+        XCTAssertEqual(body("[click]: javascript:alert(1)\n\n[click]"), "<p>click</p>")
+        XCTAssertFalse(body("[click]: javascript:alert(1)\n\n[click]").lowercased().contains("javascript:"))
+        XCTAssertEqual(
+            body("[missing]: https://example.com\n\n[text][other]\n\n[missing]"),
+            "<p>[text][other]</p>\n<p><a href=\"https://example.com\">missing</a></p>"
+        )
+    }
+
     func testListsQuotesTablesAndCode() {
         XCTAssertEqual(body("- item"), "<ul>\n<li>item</li>\n</ul>")
         XCTAssertEqual(body("- a\n- b"), "<ul>\n<li>a</li>\n<li>b</li>\n</ul>")
