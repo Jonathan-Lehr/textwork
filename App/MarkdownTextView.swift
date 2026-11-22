@@ -6,34 +6,15 @@ import AppKit
 
 struct MarkdownTextEditor: NSViewRepresentable {
     @Binding var text: String
+    var configuration = EditorConfiguration.standard
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text)
+        Coordinator(text: $text, configuration: configuration)
     }
 
     func makeNSView(context: Context) -> NSScrollView {
         let textView = NSTextView(usingTextLayoutManager: true)
-        textView.isRichText = true
-        textView.isEditable = true
-        textView.isSelectable = true
-        textView.allowsUndo = true
-        textView.isAutomaticQuoteSubstitutionEnabled = false
-        textView.isAutomaticDashSubstitutionEnabled = false
-        textView.isAutomaticDataDetectionEnabled = false
-        textView.isAutomaticLinkDetectionEnabled = false
-        textView.isAutomaticTextReplacementEnabled = false
-        textView.isAutomaticSpellingCorrectionEnabled = false
-        textView.enabledTextCheckingTypes = 0
-        textView.font = HighlightColors.baseFont
-        textView.textColor = HighlightColors.label
-        textView.textContainerInset = NSSize(width: 8, height: 12)
-        textView.isVerticallyResizable = true
-        textView.isHorizontallyResizable = false
-        textView.autoresizingMask = [.width]
-        textView.minSize = NSSize(width: 0, height: 0)
-        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        textView.textContainer?.widthTracksTextView = true
-        textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
+        configuration.apply(to: textView)
         textView.textStorage?.delegate = context.coordinator
 
         let scrollView = NSScrollView()
@@ -47,6 +28,11 @@ struct MarkdownTextEditor: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
+        if context.coordinator.configuration != configuration {
+            context.coordinator.configuration = configuration
+            configuration.apply(to: textView)
+            context.coordinator.repaint(in: textView)
+        }
         guard textView.string != text, !context.coordinator.isApplyingHighlight else { return }
         context.coordinator.replaceAll(text, in: textView)
     }
@@ -54,12 +40,20 @@ struct MarkdownTextEditor: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextStorageDelegate {
         @Binding var text: String
         let highlighter = MarkdownHighlighter()
+        var configuration: EditorConfiguration
         var snapshot: HighlightSnapshot
         var isApplyingHighlight = false
 
-        init(text: Binding<String>) {
+        init(text: Binding<String>, configuration: EditorConfiguration) {
             _text = text
+            self.configuration = configuration
             snapshot = highlighter.highlight(text.wrappedValue)
+        }
+
+        @MainActor
+        func repaint(in textView: NSTextView) {
+            guard let storage = textView.textStorage else { return }
+            paint(snapshot.spans, in: storage)
         }
 
         @MainActor
@@ -94,12 +88,12 @@ struct MarkdownTextEditor: NSViewRepresentable {
         private func paint(_ spans: [HighlightSpan], in storage: NSTextStorage) {
             let fullRange = NSRange(location: 0, length: storage.length)
             storage.beginEditing()
-            storage.setAttributes(HighlightColors.baseAttributes, range: fullRange)
+            storage.setAttributes(configuration.baseAttributes(), range: fullRange)
             for span in spans where !span.isSyntax {
-                HighlightColors.applyContent(span, to: storage)
+                HighlightColors.applyContent(span, configuration: configuration, to: storage)
             }
             for span in spans where span.isSyntax {
-                HighlightColors.applySyntax(span, to: storage)
+                HighlightColors.applySyntax(span, configuration: configuration, to: storage)
             }
             storage.endEditing()
         }
@@ -107,47 +101,46 @@ struct MarkdownTextEditor: NSViewRepresentable {
 }
 
 private enum HighlightColors {
-    static var baseFont: NSFont { NSFont.systemFont(ofSize: NSFont.systemFontSize) }
-    static var monospacedFont: NSFont { NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular) }
-    static var label: NSColor { NSColor.labelColor }
     static var syntax: NSColor { NSColor.tertiaryLabelColor }
     static var link: NSColor { NSColor.linkColor }
     static var codeBackground: NSColor { NSColor.quaternaryLabelColor.withAlphaComponent(0.35) }
 
-    static var baseAttributes: [NSAttributedString.Key: Any] {
-        [.font: baseFont, .foregroundColor: label]
-    }
-
-    static func applyContent(_ span: HighlightSpan, to storage: NSTextStorage) {
+    static func applyContent(
+        _ span: HighlightSpan,
+        configuration: EditorConfiguration,
+        to storage: NSTextStorage
+    ) {
         guard let range = nsRange(span, length: storage.length) else { return }
-        var font = (storage.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont) ?? baseFont
+        var font = (storage.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont) ?? configuration.bodyFont()
         let manager = NSFontManager.shared
         switch span.role {
         case .heading1, .heading2, .heading3, .heading4, .heading5, .heading6:
-            let size = NSFont.systemFontSize + headingBoost(span.role)
-            font = NSFont.systemFont(ofSize: size, weight: .bold)
+            let size = configuration.resolvedFontSize + headingBoost(span.role)
+            font = manager.convert(configuration.font(ofSize: size), toHaveTrait: .boldFontMask)
         case .emphasis:
             font = manager.convert(font, toHaveTrait: .italicFontMask)
         case .strong:
             font = manager.convert(font, toHaveTrait: .boldFontMask)
         case .codeSpan, .codeBlock:
-            font = monospacedFont
+            font = configuration.monospacedFont()
             storage.addAttribute(.backgroundColor, value: codeBackground, range: range)
         case .link, .image:
             storage.addAttribute(.foregroundColor, value: link, range: range)
             storage.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
-        case .table:
-            break
-        case .listMarker, .blockQuote, .thematicBreak:
+        case .table, .listMarker, .blockQuote, .thematicBreak:
             break
         }
         storage.addAttribute(.font, value: font, range: range)
     }
 
-    static func applySyntax(_ span: HighlightSpan, to storage: NSTextStorage) {
+    static func applySyntax(
+        _ span: HighlightSpan,
+        configuration: EditorConfiguration,
+        to storage: NSTextStorage
+    ) {
         guard let range = nsRange(span, length: storage.length) else { return }
         storage.addAttributes(
-            [.font: baseFont, .foregroundColor: syntax],
+            [.font: configuration.bodyFont(), .foregroundColor: syntax],
             range: range
         )
     }
@@ -173,29 +166,26 @@ import UIKit
 
 struct MarkdownTextEditor: UIViewRepresentable {
     @Binding var text: String
+    var configuration = EditorConfiguration.standard
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text)
+        Coordinator(text: $text, configuration: configuration)
     }
 
     func makeUIView(context: Context) -> UITextView {
         let textView = UITextView(usingTextLayoutManager: true)
-        textView.isEditable = true
-        textView.isSelectable = true
-        textView.smartQuotesType = .no
-        textView.smartDashesType = .no
-        textView.smartInsertDeleteType = .no
-        textView.autocorrectionType = .no
-        textView.spellCheckingType = .no
-        textView.font = HighlightColors.baseFont
-        textView.textColor = HighlightColors.label
-        textView.textContainerInset = UIEdgeInsets(top: 12, left: 8, bottom: 12, right: 8)
+        configuration.apply(to: textView)
         textView.textStorage.delegate = context.coordinator
         context.coordinator.replaceAll(text, in: textView)
         return textView
     }
 
     func updateUIView(_ textView: UITextView, context: Context) {
+        if context.coordinator.configuration != configuration {
+            context.coordinator.configuration = configuration
+            configuration.apply(to: textView)
+            context.coordinator.repaint(in: textView)
+        }
         guard textView.text != text, !context.coordinator.isApplyingHighlight else { return }
         context.coordinator.replaceAll(text, in: textView)
     }
@@ -203,12 +193,19 @@ struct MarkdownTextEditor: UIViewRepresentable {
     final class Coordinator: NSObject, NSTextStorageDelegate {
         @Binding var text: String
         let highlighter = MarkdownHighlighter()
+        var configuration: EditorConfiguration
         var snapshot: HighlightSnapshot
         var isApplyingHighlight = false
 
-        init(text: Binding<String>) {
+        init(text: Binding<String>, configuration: EditorConfiguration) {
             _text = text
+            self.configuration = configuration
             snapshot = highlighter.highlight(text.wrappedValue)
+        }
+
+        @MainActor
+        func repaint(in textView: UITextView) {
+            paint(snapshot.spans, in: textView.textStorage)
         }
 
         @MainActor
@@ -242,12 +239,12 @@ struct MarkdownTextEditor: UIViewRepresentable {
         private func paint(_ spans: [HighlightSpan], in storage: NSTextStorage) {
             let fullRange = NSRange(location: 0, length: storage.length)
             storage.beginEditing()
-            storage.setAttributes(HighlightColors.baseAttributes, range: fullRange)
+            storage.setAttributes(configuration.baseAttributes(), range: fullRange)
             for span in spans where !span.isSyntax {
-                HighlightColors.applyContent(span, to: storage)
+                HighlightColors.applyContent(span, configuration: configuration, to: storage)
             }
             for span in spans where span.isSyntax {
-                HighlightColors.applySyntax(span, to: storage)
+                HighlightColors.applySyntax(span, configuration: configuration, to: storage)
             }
             storage.endEditing()
         }
@@ -255,31 +252,27 @@ struct MarkdownTextEditor: UIViewRepresentable {
 }
 
 private enum HighlightColors {
-    static var baseFont: UIFont { UIFont.preferredFont(forTextStyle: .body) }
-    static var monospacedFont: UIFont {
-        UIFont.monospacedSystemFont(ofSize: baseFont.pointSize, weight: .regular)
-    }
-    static var label: UIColor { UIColor.label }
     static var syntax: UIColor { UIColor.tertiaryLabel }
     static var link: UIColor { UIColor.link }
     static var codeBackground: UIColor { UIColor.tertiarySystemFill }
 
-    static var baseAttributes: [NSAttributedString.Key: Any] {
-        [.font: baseFont, .foregroundColor: label]
-    }
-
-    static func applyContent(_ span: HighlightSpan, to storage: NSTextStorage) {
+    static func applyContent(
+        _ span: HighlightSpan,
+        configuration: EditorConfiguration,
+        to storage: NSTextStorage
+    ) {
         guard let range = nsRange(span, length: storage.length) else { return }
-        var font = (storage.attribute(.font, at: range.location, effectiveRange: nil) as? UIFont) ?? baseFont
+        var font = (storage.attribute(.font, at: range.location, effectiveRange: nil) as? UIFont) ?? configuration.bodyFont()
         switch span.role {
         case .heading1, .heading2, .heading3, .heading4, .heading5, .heading6:
-            font = UIFont.systemFont(ofSize: baseFont.pointSize + headingBoost(span.role), weight: .bold)
+            let size = configuration.resolvedFontSize + headingBoost(span.role)
+            font = adding(.traitBold, to: configuration.font(ofSize: size))
         case .emphasis:
             font = adding(.traitItalic, to: font)
         case .strong:
             font = adding(.traitBold, to: font)
         case .codeSpan, .codeBlock:
-            font = monospacedFont
+            font = configuration.monospacedFont()
             storage.addAttribute(.backgroundColor, value: codeBackground, range: range)
         case .link, .image:
             storage.addAttribute(.foregroundColor, value: link, range: range)
@@ -290,9 +283,16 @@ private enum HighlightColors {
         storage.addAttribute(.font, value: font, range: range)
     }
 
-    static func applySyntax(_ span: HighlightSpan, to storage: NSTextStorage) {
+    static func applySyntax(
+        _ span: HighlightSpan,
+        configuration: EditorConfiguration,
+        to storage: NSTextStorage
+    ) {
         guard let range = nsRange(span, length: storage.length) else { return }
-        storage.addAttributes([.font: baseFont, .foregroundColor: syntax], range: range)
+        storage.addAttributes(
+            [.font: configuration.bodyFont(), .foregroundColor: syntax],
+            range: range
+        )
     }
 
     static func adding(_ trait: UIFontDescriptor.SymbolicTraits, to font: UIFont) -> UIFont {
