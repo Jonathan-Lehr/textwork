@@ -66,7 +66,7 @@ public enum HighlightFontTreatment: Equatable, Sendable {
 
 /// What the text view should paint for one span.
 ///
-/// `background` is nil for every role. Inline code, indented code, and fenced
+/// The only fill is a light gray behind inline code. Indented code and fenced
 /// code are a monospaced font and a foreground color.
 public struct HighlightRunStyle: Equatable, Sendable {
     public var foreground: HighlightColor
@@ -91,13 +91,18 @@ public struct HighlightRunStyle: Equatable, Sendable {
 ///
 /// Syntax markers (`isSyntax`) use a quieter tint of the same hue as the
 /// content they mark, so hashes, asterisks, backticks, and brackets stay
-/// readable and sit behind the words. Reference links use the link role.
-/// Fenced code uses one color for every language.
+/// readable and sit behind the words. Emphasis and strong words use the body
+/// color; italic and bold carry the meaning, and their markers are a quieter
+/// gray. Reference links use the link role. Fenced code uses one color for
+/// every language. Inline code sits on ``inlineCodeBackground``.
 ///
 /// The text views turn these into dynamic `NSColor` and `UIColor` values, so
 /// the same attributes follow the system appearance.
 public struct HighlightTheme: Equatable, Sendable {
     public var body: HighlightColor
+    /// Very light gray behind inline code. Light and dark are separate so the
+    /// chip stays subtle on both appearances.
+    public var inlineCodeBackground: HighlightColor
     public var roles: [HighlightRole: HighlightRoleColors]
 
     /// Approximate system text background the standard palette is tuned against.
@@ -105,31 +110,24 @@ public struct HighlightTheme: Equatable, Sendable {
     /// Approximate system text background the standard palette is tuned against.
     public static let darkEditorBackground = HighlightColorComponents(red: 30, green: 30, blue: 30)
 
-    public init(body: HighlightColor, roles: [HighlightRole: HighlightRoleColors]) {
+    public init(body: HighlightColor, inlineCodeBackground: HighlightColor, roles: [HighlightRole: HighlightRoleColors]) {
         self.body = body
+        self.inlineCodeBackground = inlineCodeBackground
         self.roles = roles
     }
 
     public static let standard: HighlightTheme = {
         let body = highlightColor(light: (0x1D, 0x1D, 0x1F), dark: (0xF5, 0xF5, 0xF7))
+        let inlineCodeBackground = highlightColor(light: (0xF3, 0xF3, 0xF5), dark: (0x2A, 0x2A, 0x2E))
+        let marker = highlightColor(light: (0x6E, 0x6E, 0x73), dark: (0x98, 0x98, 0x9D))
         let heading = roleColors(
             contentLight: (0x24, 0x40, 0x94),
             contentDark: (0x9C, 0xB2, 0xFF),
             syntaxLight: (0x5D, 0x72, 0xB0),
             syntaxDark: (0x77, 0x86, 0xBD)
         )
-        let emphasis = roleColors(
-            contentLight: (0x70, 0x30, 0x9E),
-            contentDark: (0xE0, 0xB0, 0xFF),
-            syntaxLight: (0x90, 0x5F, 0xB4),
-            syntaxDark: (0x9B, 0x7C, 0xAF)
-        )
-        let strong = roleColors(
-            contentLight: (0x8F, 0x38, 0x10),
-            contentDark: (0xFF, 0xBA, 0x8C),
-            syntaxLight: (0xA7, 0x62, 0x42),
-            syntaxDark: (0xAA, 0x7F, 0x62)
-        )
+        let emphasis = HighlightRoleColors(content: body, syntax: marker)
+        let strong = HighlightRoleColors(content: body, syntax: marker)
         let code = roleColors(
             contentLight: (0xA8, 0x28, 0x4A),
             contentDark: (0xFF, 0xA0, 0xB8),
@@ -200,7 +198,7 @@ public struct HighlightTheme: Equatable, Sendable {
         for role in HighlightRole.allCases {
             precondition(roles[role] != nil, "Highlight theme is missing \(role.rawValue)")
         }
-        return HighlightTheme(body: body, roles: roles)
+        return HighlightTheme(body: body, inlineCodeBackground: inlineCodeBackground, roles: roles)
     }()
 
     public func colors(for role: HighlightRole) -> HighlightRoleColors {
@@ -212,7 +210,8 @@ public struct HighlightTheme: Equatable, Sendable {
         return isSyntax ? colors.syntax : colors.content
     }
 
-    /// Fill behind a span. The standard theme returns nil for every role.
+    /// Fill behind a span. Inline code returns ``inlineCodeBackground``.
+    /// Indented code and fenced code return nil.
     public func backgroundColor(for role: HighlightRole, isSyntax: Bool) -> HighlightColor? {
         runStyle(for: role, isSyntax: isSyntax).background
     }
@@ -240,7 +239,14 @@ public struct HighlightTheme: Equatable, Sendable {
             return HighlightRunStyle(foreground: foreground, background: nil, fontTreatment: .emphasis, underline: false)
         case .strong:
             return HighlightRunStyle(foreground: foreground, background: nil, fontTreatment: .strong, underline: false)
-        case .codeSpan, .codeBlock, .html:
+        case .codeSpan:
+            return HighlightRunStyle(
+                foreground: foreground,
+                background: inlineCodeBackground,
+                fontTreatment: .monospaced,
+                underline: false
+            )
+        case .codeBlock, .html:
             return HighlightRunStyle(foreground: foreground, background: nil, fontTreatment: .monospaced, underline: false)
         case .link, .image:
             return HighlightRunStyle(foreground: foreground, background: nil, fontTreatment: .body, underline: true)
@@ -257,9 +263,8 @@ public struct HighlightTheme: Equatable, Sendable {
         let entries: [(String, HighlightColor)] = [
             ("--text", body),
             ("--heading", color(for: .heading1, isSyntax: false)),
-            ("--emphasis", color(for: .emphasis, isSyntax: false)),
-            ("--strong", color(for: .strong, isSyntax: false)),
             ("--code", color(for: .codeSpan, isSyntax: false)),
+            ("--code-fill", inlineCodeBackground),
             ("--link", color(for: .link, isSyntax: false)),
             ("--quote", color(for: .blockQuote, isSyntax: false)),
             ("--quote-marker", color(for: .blockQuote, isSyntax: true)),

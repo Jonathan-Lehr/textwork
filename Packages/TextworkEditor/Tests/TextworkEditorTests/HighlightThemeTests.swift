@@ -16,8 +16,8 @@ final class HighlightThemeTests: XCTestCase {
             .heading4: ExpectedColors("#244094", "#9CB2FF", "#5D72B0", "#7786BD"),
             .heading5: ExpectedColors("#244094", "#9CB2FF", "#5D72B0", "#7786BD"),
             .heading6: ExpectedColors("#244094", "#9CB2FF", "#5D72B0", "#7786BD"),
-            .emphasis: ExpectedColors("#70309E", "#E0B0FF", "#905FB4", "#9B7CAF"),
-            .strong: ExpectedColors("#8F3810", "#FFBA8C", "#A76242", "#AA7F62"),
+            .emphasis: ExpectedColors("#1D1D1F", "#F5F5F7", "#6E6E73", "#98989D"),
+            .strong: ExpectedColors("#1D1D1F", "#F5F5F7", "#6E6E73", "#98989D"),
             .codeSpan: ExpectedColors("#A8284A", "#FFA0B8", "#B9516C", "#B67686"),
             .codeBlock: ExpectedColors("#A8284A", "#FFA0B8", "#B9516C", "#B67686"),
             .link: ExpectedColors("#0066CC", "#419CFF", "#1C77D2", "#3C8ADF"),
@@ -40,8 +40,13 @@ final class HighlightThemeTests: XCTestCase {
             XCTAssertNotEqual(content.light, content.dark, role.rawValue)
             XCTAssertNotEqual(syntax.light, syntax.dark, role.rawValue)
             XCTAssertNotEqual(content, syntax, role.rawValue)
-            XCTAssertNil(theme.backgroundColor(for: role, isSyntax: false), role.rawValue)
-            XCTAssertNil(theme.backgroundColor(for: role, isSyntax: true), role.rawValue)
+            if role == .codeSpan {
+                XCTAssertEqual(theme.backgroundColor(for: role, isSyntax: false), theme.inlineCodeBackground)
+                XCTAssertNil(theme.backgroundColor(for: role, isSyntax: true), role.rawValue)
+            } else {
+                XCTAssertNil(theme.backgroundColor(for: role, isSyntax: false), role.rawValue)
+                XCTAssertNil(theme.backgroundColor(for: role, isSyntax: true), role.rawValue)
+            }
         }
         XCTAssertEqual(theme.body.light.cssHex, "#1D1D1F")
         XCTAssertEqual(theme.body.dark.cssHex, "#F5F5F7")
@@ -71,9 +76,22 @@ final class HighlightThemeTests: XCTestCase {
             for isSyntax in [false, true] {
                 let style = theme.runStyle(for: role, isSyntax: isSyntax)
                 XCTAssertEqual(style.foreground, theme.color(for: role, isSyntax: isSyntax))
-                XCTAssertNil(style.background)
+                let expectsFill = role == .codeSpan && !isSyntax
+                if expectsFill {
+                    XCTAssertEqual(style.background, theme.inlineCodeBackground)
+                } else {
+                    XCTAssertNil(style.background)
+                }
             }
         }
+        XCTAssertEqual(theme.color(for: .emphasis, isSyntax: false), theme.body)
+        XCTAssertEqual(theme.color(for: .strong, isSyntax: false), theme.body)
+        XCTAssertNotEqual(theme.color(for: .emphasis, isSyntax: true), theme.color(for: .emphasis, isSyntax: false))
+        XCTAssertEqual(theme.inlineCodeBackground.light.cssHex, "#F3F3F5")
+        XCTAssertEqual(theme.inlineCodeBackground.dark.cssHex, "#2A2A2E")
+        let code = theme.color(for: .codeSpan, isSyntax: false)
+        XCTAssertGreaterThanOrEqual(contrast(code.light, theme.inlineCodeBackground.light), 4.5)
+        XCTAssertGreaterThanOrEqual(contrast(code.dark, theme.inlineCodeBackground.dark), 4.5)
 
         XCTAssertEqual(theme.runStyle(for: .codeSpan, isSyntax: false).fontTreatment, .monospaced)
         XCTAssertEqual(theme.runStyle(for: .codeSpan, isSyntax: true).fontTreatment, .monospaced)
@@ -164,6 +182,20 @@ final class HighlightThemeTests: XCTestCase {
         XCTAssertTrue(light.contains(thematic.light.cssHex))
         XCTAssertTrue(dark.contains(quoteMarker.dark.cssHex))
         XCTAssertTrue(stylesheet.contains("background: var(--code-fill)"))
+        XCTAssertTrue(stylesheet.contains(theme.inlineCodeBackground.light.cssHex))
+        XCTAssertTrue(stylesheet.contains(theme.inlineCodeBackground.dark.cssHex))
+        XCTAssertFalse(stylesheet.contains("em { color"))
+        XCTAssertFalse(stylesheet.contains("strong { color"))
+        if let preStart = stylesheet.range(of: "pre {") {
+            let afterPre = stylesheet[preStart.upperBound...]
+            if let preEnd = afterPre.range(of: "}") {
+                XCTAssertFalse(stylesheet[preStart.lowerBound..<preEnd.upperBound].contains("background"))
+            } else {
+                XCTFail("Unclosed pre rule")
+            }
+        } else {
+            XCTFail("Missing pre rule")
+        }
         XCTAssertTrue(stylesheet.contains("padding: 0.12em 0.35em"))
         XCTAssertTrue(stylesheet.contains("width: min(68ch, 100%)"))
         XCTAssertTrue(stylesheet.contains("h1 { font-size: 2rem;"))

@@ -32,21 +32,23 @@ public struct MarkdownHTMLRenderer: Sendable {
     ///
     /// Role colors come from ``HighlightTheme/standard``. Light values sit on
     /// `:root`. Dark values replace them under `prefers-color-scheme: dark`.
-    /// The code chip, margins, and type scale are unchanged.
+    /// Inline code keeps a light gray chip. Fenced and indented code do not.
+    /// Emphasis and strong inherit the body color. Margins and the type scale
+    /// stay as they are.
     public static let stylesheet: String = {
         let theme = HighlightTheme.standard
         return """
         :root {
           color-scheme: light dark;
         \(theme.previewCustomProperties(forDarkAppearance: false))
-          --code-fill: rgba(0, 0, 0, 0.06);
+          --table-fill: rgba(0, 0, 0, 0.06);
           --line: rgba(0, 0, 0, 0.14);
           --page: rgba(0, 0, 0, 0.05);
         }
         @media (prefers-color-scheme: dark) {
           :root {
         \(theme.previewCustomProperties(forDarkAppearance: true))
-            --code-fill: rgba(255, 255, 255, 0.08);
+            --table-fill: rgba(255, 255, 255, 0.08);
             --line: rgba(255, 255, 255, 0.16);
             --page: rgba(255, 255, 255, 0.06);
           }
@@ -78,8 +80,6 @@ public struct MarkdownHTMLRenderer: Sendable {
         h6 { font-size: 0.92rem; font-weight: 600; margin: 1em 0 0.3em; }
         p { margin: 0 0 0.8em; }
         a { color: var(--link); text-underline-offset: 2px; }
-        em { color: var(--emphasis); }
-        strong { color: var(--strong); }
         code {
           font-family: ui-monospace, "SF Mono", Menlo, monospace;
           font-size: 0.9em;
@@ -90,7 +90,6 @@ public struct MarkdownHTMLRenderer: Sendable {
         }
         pre {
           color: var(--code);
-          background: var(--code-fill);
           padding: 14px 16px;
           border-radius: 10px;
           overflow: auto;
@@ -112,7 +111,7 @@ public struct MarkdownHTMLRenderer: Sendable {
         li.task input { margin-right: 0.4em; }
         table { border-collapse: collapse; margin: 0 0 1em; width: 100%; }
         th, td { border: 1px solid var(--line); padding: 6px 10px; vertical-align: top; }
-        th { font-weight: 600; text-align: left; background: var(--code-fill); }
+        th { font-weight: 600; text-align: left; background: var(--table-fill); }
         hr { border: 0; border-top: 1px solid var(--thematic-break); margin: 1.4em 0; }
         img { max-width: 100%; height: auto; }
         """
