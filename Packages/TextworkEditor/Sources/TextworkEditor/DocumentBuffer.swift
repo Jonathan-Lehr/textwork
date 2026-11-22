@@ -12,6 +12,8 @@ enum LineKind: UInt8, Equatable, Sendable {
     case underlineMarker
     case tableRow
     case tableDelimiter
+    case referenceDefinition
+    case html
 }
 
 struct TextLine: Equatable, Sendable {
@@ -38,6 +40,8 @@ enum StructureKind: Equatable, Sendable {
     case indentedCode
     case paragraph
     case table
+    case referenceDefinition
+    case htmlBlock
 }
 
 struct StyledBlock: Equatable, Sendable {
@@ -45,6 +49,11 @@ struct StyledBlock: Equatable, Sendable {
     var endLine: Int
     var kind: StructureKind
     var spans: [HighlightSpan]
+    /// Normalized labels of reference-shaped links in this block, defined or not.
+    ///
+    /// A later edit that adds or removes one of these definitions restyles the
+    /// block without walking every other block's bytes.
+    var candidateLabels: [String]
 }
 
 enum DocumentBuffer {
@@ -104,7 +113,21 @@ enum DocumentBuffer {
         var inFence = false
         var fenceMarker: UInt8 = 0
         var fenceLength = 0
+        var htmlEnd: HTMLBlockEnd?
         while index < count {
+            if let end = htmlEnd {
+                let line = lines[index]
+                if end == .blankLine, isBlank(line, bytes: bytes) {
+                    htmlEnd = nil
+                } else {
+                    lines[index].kind = .html
+                    if htmlEndIsSatisfied(end, line: line, bytes: bytes) {
+                        htmlEnd = nil
+                    }
+                    index += 1
+                    continue
+                }
+            }
             if inFence {
                 if fenceCloser(lines[index], bytes: bytes, marker: fenceMarker, minimum: fenceLength) {
                     lines[index].kind = .fenceClose
@@ -172,6 +195,20 @@ enum DocumentBuffer {
                 index = cursor
                 continue
             }
+            let continuesParagraph = index > 0 && lines[index - 1].kind == .paragraph
+            if let opener = htmlBlockOpening(line, bytes: bytes, paragraphContinuation: continuesParagraph) {
+                lines[index].kind = .html
+                if !htmlEndIsSatisfied(opener, line: line, bytes: bytes) {
+                    htmlEnd = opener
+                }
+                index += 1
+                continue
+            }
+            if !continuesParagraph, ReferenceDefinitionParser.parseLine(bytes: bytes, line: line) != nil {
+                lines[index].kind = .referenceDefinition
+                index += 1
+                continue
+            }
             lines[index].kind = .paragraph
             if index + 1 < count, let _ = underlineHeadingLevel(lines[index + 1], bytes: bytes) {
                 lines[index + 1].kind = .underlineMarker
@@ -180,6 +217,16 @@ enum DocumentBuffer {
             }
             index += 1
         }
+    }
+
+    static func definedReferenceLabels(lines: [TextLine], bytes: [UInt8]) -> Set<String> {
+        var labels: Set<String> = []
+        for line in lines where line.kind == .referenceDefinition {
+            if let parsed = ReferenceDefinitionParser.parseLine(bytes: bytes, line: line) {
+                labels.insert(parsed.normalizedLabel)
+            }
+        }
+        return labels
     }
 
     static func group(_ lines: [TextLine], bytes: [UInt8]) -> [(start: Int, end: Int, kind: StructureKind)] {
@@ -251,6 +298,16 @@ enum DocumentBuffer {
                     }
                 }
                 blocks.append((index, end, .table))
+                index = end
+            case .referenceDefinition:
+                blocks.append((index, index + 1, .referenceDefinition))
+                index += 1
+            case .html:
+                var end = index + 1
+                while end < lines.count && lines[end].kind == .html {
+                    end += 1
+                }
+                blocks.append((index, end, .htmlBlock))
                 index = end
             case .fenceClose, .fenceInside:
                 var end = index + 1
@@ -334,6 +391,174 @@ enum DocumentBuffer {
         if byte & 0xF8 == 0xF0 { return (min(4, bytes.count - index), 2) }
         return (1, 1)
     }
+}
+
+struct ReferenceDefinitionParse: Equatable {
+    var normalizedLabel: String
+    var openingBracket: Int
+    var label: Range<Int>
+    var closingBracket: Int
+    var colon: Int
+    var destination: Range<Int>
+    var destinationOpening: Int?
+    var destinationClosing: Int?
+    var title: Range<Int>?
+    var titleOpening: Int?
+    var titleClosing: Int?
+}
+
+enum ReferenceDefinitionParser {
+    static func parseLine(bytes: [UInt8], line: TextLine) -> ReferenceDefinitionParse? {
+        let end = line.contentByteEnd
+        var index = line.byteStart
+        var columns = 0
+        while index < end && columns <= 3 {
+            if bytes[index] == 0x20 {
+                columns += 1
+                index += 1
+            } else if bytes[index] == 0x09 {
+                let next = columns + (4 - (columns % 4))
+                if next > 3 { return nil }
+                columns = next
+                index += 1
+            } else {
+                break
+            }
+        }
+        if columns > 3 { return nil }
+        guard index < end, bytes[index] == 0x5B, !isEscapedByte(bytes, index) else { return nil }
+        let opening = index
+        index += 1
+        let labelStart = index
+        while index < end {
+            if bytes[index] == 0x5C, index + 1 < end {
+                index += 2
+                continue
+            }
+            if bytes[index] == 0x5B || bytes[index] == 0x0A { return nil }
+            if bytes[index] == 0x5D { break }
+            index += 1
+        }
+        guard index < end, bytes[index] == 0x5D else { return nil }
+        let labelEnd = index
+        let closing = index
+        guard labelEnd > labelStart, labelEnd - labelStart <= 999 else { return nil }
+        index += 1
+        guard index < end, bytes[index] == 0x3A else { return nil }
+        let colon = index
+        index += 1
+        index = skipHorizontalSpace(bytes, index, end)
+        guard index < end else { return nil }
+
+        var destination: Range<Int>
+        var destinationOpening: Int?
+        var destinationClosing: Int?
+        if bytes[index] == 0x3C {
+            destinationOpening = index
+            let destinationStart = index + 1
+            var cursor = destinationStart
+            while cursor < end, bytes[cursor] != 0x3E, bytes[cursor] != 0x0A {
+                if bytes[cursor] == 0x5C, cursor + 1 < end {
+                    cursor += 2
+                    continue
+                }
+                if bytes[cursor] == 0x3C { return nil }
+                cursor += 1
+            }
+            guard cursor < end, bytes[cursor] == 0x3E, cursor > destinationStart else { return nil }
+            destination = destinationStart..<cursor
+            destinationClosing = cursor
+            index = cursor + 1
+        } else {
+            let destinationStart = index
+            var depth = 0
+            while index < end {
+                let byte = bytes[index]
+                if byte == 0x5C, index + 1 < end {
+                    index += 2
+                    continue
+                }
+                if byte == 0x20 || byte == 0x09 { break }
+                if byte <= 0x1F || byte == 0x7F { return nil }
+                if byte == 0x28 {
+                    depth += 1
+                } else if byte == 0x29 {
+                    if depth == 0 { break }
+                    depth -= 1
+                }
+                index += 1
+            }
+            guard index > destinationStart, depth == 0 else { return nil }
+            destination = destinationStart..<index
+        }
+
+        index = skipHorizontalSpace(bytes, index, end)
+        var title: Range<Int>?
+        var titleOpening: Int?
+        var titleClosing: Int?
+        if index < end {
+            let marker = bytes[index]
+            let closingMarker: UInt8
+            if marker == 0x22 || marker == 0x27 {
+                closingMarker = marker
+            } else if marker == 0x28 {
+                closingMarker = 0x29
+            } else {
+                return nil
+            }
+            titleOpening = index
+            index += 1
+            let titleStart = index
+            while index < end, bytes[index] != closingMarker {
+                if bytes[index] == 0x5C, index + 1 < end {
+                    index += 2
+                    continue
+                }
+                index += 1
+            }
+            guard index < end, bytes[index] == closingMarker else { return nil }
+            title = titleStart..<index
+            titleClosing = index
+            index += 1
+            index = skipHorizontalSpace(bytes, index, end)
+            guard index == end else { return nil }
+        }
+
+        let label = String(decoding: bytes[labelStart..<labelEnd], as: UTF8.self)
+        let normalized = normalizeReferenceLabel(label)
+        guard !normalized.isEmpty, label.count <= 999 else { return nil }
+        return ReferenceDefinitionParse(
+            normalizedLabel: normalized,
+            openingBracket: opening,
+            label: labelStart..<labelEnd,
+            closingBracket: closing,
+            colon: colon,
+            destination: destination,
+            destinationOpening: destinationOpening,
+            destinationClosing: destinationClosing,
+            title: title,
+            titleOpening: titleOpening,
+            titleClosing: titleClosing
+        )
+    }
+}
+
+private func skipHorizontalSpace(_ bytes: [UInt8], _ start: Int, _ end: Int) -> Int {
+    var index = start
+    while index < end, bytes[index] == 0x20 || bytes[index] == 0x09 {
+        index += 1
+    }
+    return index
+}
+
+private func isEscapedByte(_ bytes: [UInt8], _ index: Int) -> Bool {
+    var slashCount = 0
+    var cursor = index - 1
+    while cursor >= 0, bytes[cursor] == 0x5C {
+        slashCount += 1
+        cursor -= 1
+    }
+    return slashCount % 2 == 1
 }
 
 // MARK: - Line predicates
@@ -547,6 +772,219 @@ private func opensBlockAfterTable(_ line: TextLine, bytes: [UInt8]) -> Bool {
     isHashHeading(line, bytes: bytes) || openingFence(line, bytes: bytes) != nil || isQuote(line, bytes: bytes)
 }
 
+private enum HTMLBlockEnd: Equatable {
+    case closingTag([UInt8])
+    case comment
+    case processingInstruction
+    case declaration
+    case characterData
+    case blankLine
+}
+
+private let htmlBlockTags: Set<String> = [
+    "address", "article", "aside", "base", "basefont", "blockquote", "body", "caption", "center",
+    "col", "colgroup", "dd", "details", "dialog", "dir", "div", "dl", "dt", "fieldset",
+    "figcaption", "figure", "footer", "form", "frame", "frameset", "h1", "h2", "h3", "h4", "h5",
+    "h6", "head", "header", "hr", "html", "iframe", "legend", "li", "link", "main", "menu",
+    "menuitem", "nav", "noframes", "ol", "optgroup", "option", "p", "param", "search", "section",
+    "summary", "table", "tbody", "td", "tfoot", "th", "thead", "title", "tr", "track", "ul",
+]
+
+private let htmlRawTags: Set<String> = ["script", "pre", "style", "textarea"]
+
+private func htmlBlockOpening(_ line: TextLine, bytes: [UInt8], paragraphContinuation: Bool) -> HTMLBlockEnd? {
+    let sliceEnd = line.contentByteEnd
+    var index = line.byteStart
+    var columns = 0
+    while index < sliceEnd && columns <= 3 {
+        if bytes[index] == 0x20 {
+            columns += 1
+            index += 1
+        } else if bytes[index] == 0x09 {
+            let next = columns + (4 - (columns % 4))
+            if next > 3 { return nil }
+            columns = next
+            index += 1
+        } else {
+            break
+        }
+    }
+    if columns > 3 || index >= sliceEnd || bytes[index] != 0x3C { return nil }
+    if hasASCIIPrefix(bytes, at: index, end: sliceEnd, ascii: "<!--") {
+        return .comment
+    }
+    if hasASCIIPrefix(bytes, at: index, end: sliceEnd, ascii: "<![CDATA[") {
+        return .characterData
+    }
+    let afterBracket = index + 1
+    if afterBracket < sliceEnd, bytes[afterBracket] == 0x3F {
+        return .processingInstruction
+    }
+    if afterBracket < sliceEnd, bytes[afterBracket] == 0x21 {
+        let letterIndex = afterBracket + 1
+        if letterIndex < sliceEnd, bytes[letterIndex].isASCIILetter {
+            return .declaration
+        }
+        return nil
+    }
+
+    var nameStart = afterBracket
+    if nameStart < sliceEnd, bytes[nameStart] == 0x2F {
+        nameStart += 1
+    }
+    guard nameStart < sliceEnd, bytes[nameStart].isASCIILetter else { return nil }
+    var nameEnd = nameStart + 1
+    while nameEnd < sliceEnd {
+        let byte = bytes[nameEnd]
+        if byte.isASCIILetter || byte.isDigit || byte == 0x2D {
+            nameEnd += 1
+        } else {
+            break
+        }
+    }
+    let name = asciiLowercased(bytes, nameStart, nameEnd)
+    guard tagBoundaryFollows(bytes, nameEnd, sliceEnd) else {
+        if paragraphContinuation { return nil }
+        return completeHTMLTag(bytes, tagStart: index, lineEnd: sliceEnd) ? .blankLine : nil
+    }
+    if htmlRawTags.contains(name) {
+        return .closingTag(Array("</\(name)>".utf8))
+    }
+    if htmlBlockTags.contains(name) {
+        return .blankLine
+    }
+    if paragraphContinuation { return nil }
+    return completeHTMLTag(bytes, tagStart: index, lineEnd: sliceEnd) ? .blankLine : nil
+}
+
+private func tagBoundaryFollows(_ bytes: [UInt8], _ index: Int, _ end: Int) -> Bool {
+    if index >= end { return true }
+    let byte = bytes[index]
+    if byte == 0x20 || byte == 0x09 || byte == 0x3E { return true }
+    if byte == 0x2F {
+        return index + 1 == end || bytes[index + 1] == 0x3E || bytes[index + 1] == 0x20 || bytes[index + 1] == 0x09
+    }
+    return false
+}
+
+private func completeHTMLTag(_ bytes: [UInt8], tagStart: Int, lineEnd: Int) -> Bool {
+    var index = tagStart + 1
+    guard index < lineEnd else { return false }
+    if bytes[index] == 0x2F {
+        index += 1
+    }
+    guard index < lineEnd, bytes[index].isASCIILetter else { return false }
+    index += 1
+    while index < lineEnd {
+        let byte = bytes[index]
+        if byte.isASCIILetter || byte.isDigit || byte == 0x2D {
+            index += 1
+        } else {
+            break
+        }
+    }
+    var quote: UInt8?
+    while index < lineEnd {
+        let byte = bytes[index]
+        if let openQuote = quote {
+            if byte == 0x5C, index + 1 < lineEnd {
+                index += 2
+                continue
+            }
+            if byte == openQuote { quote = nil }
+            index += 1
+            continue
+        }
+        if byte == 0x22 || byte == 0x27 {
+            quote = byte
+            index += 1
+            continue
+        }
+        if byte == 0x3E {
+            index += 1
+            while index < lineEnd {
+                if bytes[index] != 0x20 && bytes[index] != 0x09 { return false }
+                index += 1
+            }
+            return true
+        }
+        index += 1
+    }
+    return false
+}
+
+private func htmlEndIsSatisfied(_ end: HTMLBlockEnd, line: TextLine, bytes: [UInt8]) -> Bool {
+    switch end {
+    case .blankLine:
+        return false
+    case .comment:
+        return lineContains(bytes, line, ascii: "-->")
+    case .processingInstruction:
+        return lineContains(bytes, line, ascii: "?>")
+    case .declaration:
+        return lineContains(bytes, line, ascii: ">")
+    case .characterData:
+        return lineContains(bytes, line, ascii: "]]>")
+    case .closingTag(let needle):
+        return lineContainsCaseInsensitive(bytes, line, needle)
+    }
+}
+
+private func hasASCIIPrefix(_ bytes: [UInt8], at index: Int, end: Int, ascii: String) -> Bool {
+    let prefix = Array(ascii.utf8)
+    guard index + prefix.count <= end else { return false }
+    return Array(bytes[index..<(index + prefix.count)]) == prefix
+}
+
+private func lineContains(_ bytes: [UInt8], _ line: TextLine, ascii: String) -> Bool {
+    let needle = Array(ascii.utf8)
+    let start = line.byteStart
+    let end = line.contentByteEnd
+    guard needle.count <= end - start else { return false }
+    var index = start
+    while index + needle.count <= end {
+        if Array(bytes[index..<(index + needle.count)]) == needle { return true }
+        index += 1
+    }
+    return false
+}
+
+private func lineContainsCaseInsensitive(_ bytes: [UInt8], _ line: TextLine, _ needle: [UInt8]) -> Bool {
+    let start = line.byteStart
+    let end = line.contentByteEnd
+    guard needle.count <= end - start else { return false }
+    var index = start
+    while index + needle.count <= end {
+        var matches = true
+        for offset in needle.indices {
+            if asciiLower(bytes[index + offset]) != needle[offset] {
+                matches = false
+                break
+            }
+        }
+        if matches { return true }
+        index += 1
+    }
+    return false
+}
+
+private func asciiLowercased(_ bytes: [UInt8], _ start: Int, _ end: Int) -> String {
+    var characters: [UInt8] = []
+    characters.reserveCapacity(end - start)
+    for index in start..<end {
+        characters.append(asciiLower(bytes[index]))
+    }
+    return String(decoding: characters, as: UTF8.self)
+}
+
+private func asciiLower(_ byte: UInt8) -> UInt8 {
+    if byte >= 0x41 && byte <= 0x5A { return byte + 0x20 }
+    return byte
+}
+
 private extension UInt8 {
     var isDigit: Bool { self >= 0x30 && self <= 0x39 }
+    var isASCIILetter: Bool {
+        (self >= 0x41 && self <= 0x5A) || (self >= 0x61 && self <= 0x7A)
+    }
 }

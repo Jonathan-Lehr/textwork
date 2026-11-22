@@ -19,6 +19,6 @@ The preview is a `WKWebView` inside the existing inset card. It is not editable.
 
 ## Consequences
 
-The preview shows headings, paragraphs, lists, quotes, tables, and code as separate blocks, and export can use the same HTML. The renderer is not a full CommonMark implementation. Reference-style links, strikethrough, and footnotes stay as text. Raw HTML is shown as text on purpose. Character references cover a small named set plus numeric references. Some list and delimiter edge cases will differ from cmark.
+The preview shows headings, paragraphs, lists, quotes, tables, and code as separate blocks, and export can use the same HTML. The renderer is not a full CommonMark implementation. Reference-style links resolve against `[label]: destination` definitions. Strikethrough and footnotes stay as text. Raw HTML is shown as text on purpose. Character references cover a small named set plus numeric references. Some list and delimiter edge cases will differ from cmark.
 
 PDF export is still the system print path. It should print this HTML rather than grow a second renderer. A sandboxed build will need security-scoped access to the document directory for images next to the file; the preview already starts that access when the system gives it.

@@ -13,11 +13,11 @@ public enum MarkdownImageAddressing: Sendable, Equatable {
 /// Renders Markdown to HTML for the preview and for HTML export.
 ///
 /// One pipeline covers both. The grammar is CommonMark plus GitHub-flavored
-/// tables, fenced code, and task lists. Reference-style links stay as text.
-/// Raw HTML is escaped instead of being inserted, so a document cannot add a
-/// script or an event handler. Character references cover the names this
-/// renderer emits (`amp`, `lt`, `gt`, `quot`, `apos`, `nbsp`) and numeric
-/// references.
+/// tables, fenced code, and task lists. Reference-style links resolve against
+/// `[label]: destination` definitions anywhere in the document. Raw HTML is
+/// escaped instead of being inserted, so a document cannot add a script or an
+/// event handler. Character references cover the names this renderer emits
+/// (`amp`, `lt`, `gt`, `quot`, `apos`, `nbsp`) and numeric references.
 public struct MarkdownHTMLRenderer: Sendable {
     public static let previewScheme = "textwork-preview"
     public static let previewHost = "document"
@@ -278,6 +278,8 @@ public struct MarkdownHTMLRenderer: Sendable {
                 return escapeText(alternativeText)
             }
             return "<img src=\"\(source)\" alt=\"\(escapeAttribute(decodeEntities(alternativeText)))\">"
+        case .unresolvedReference(let match):
+            return escapeText(match.opening) + emitInlines(match.children) + escapeText(match.closing)
         }
     }
 

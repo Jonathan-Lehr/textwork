@@ -7,7 +7,14 @@ public struct MarkdownHighlighter: Sendable {
     public init() {}
 
     public func highlight(_ text: String) -> HighlightSnapshot {
-        assemble(bytes: Array(text.utf8), previous: nil, editByteStart: 0, editByteEnd: 0, utf16Delta: 0)
+        assemble(
+            bytes: Array(text.utf8),
+            previous: nil,
+            editByteStart: 0,
+            editByteEnd: 0,
+            utf16Delta: 0,
+            editedUTF16: nil
+        )
     }
 
     public func apply(_ edit: MarkdownEdit, to snapshot: HighlightSnapshot) -> HighlightSnapshot {
@@ -21,12 +28,14 @@ public struct MarkdownHighlighter: Sendable {
         bytes.replaceSubrange(startByte..<endByte, with: replacement)
         let insertedEnd = startByte + replacement.count
         let utf16Delta = edit.replacement.utf16.count - (upper - lower)
+        let editedUTF16 = lower..<(lower + edit.replacement.utf16.count)
         return assemble(
             bytes: bytes,
             previous: snapshot,
             editByteStart: startByte,
             editByteEnd: insertedEnd,
-            utf16Delta: utf16Delta
+            utf16Delta: utf16Delta,
+            editedUTF16: editedUTF16
         )
     }
 
@@ -35,14 +44,16 @@ public struct MarkdownHighlighter: Sendable {
         previous: HighlightSnapshot?,
         editByteStart: Int,
         editByteEnd: Int,
-        utf16Delta: Int
+        utf16Delta: Int,
+        editedUTF16: Range<Int>?
     ) -> HighlightSnapshot {
         var lines = DocumentBuffer.lines(in: bytes)
         DocumentBuffer.classify(&lines, bytes: bytes)
+        let definedLabels = DocumentBuffer.definedReferenceLabels(lines: lines, bytes: bytes)
         let structures = DocumentBuffer.group(lines, bytes: bytes)
         let ranges = structures.map { BlockStyler.contentByteRange(lines: lines, startLine: $0.start, endLine: $0.end) }
 
-        let spansByIndex = reusePlan(
+        var reused = reusePlan(
             structures: structures,
             ranges: ranges,
             bytes: bytes,
@@ -52,37 +63,59 @@ public struct MarkdownHighlighter: Sendable {
             editByteEnd: editByteEnd,
             utf16Delta: utf16Delta
         )
+        let changedLabels = previous.map { definedLabels.symmetricDifference($0.definedReferenceLabels) } ?? []
+        if !changedLabels.isEmpty {
+            let stale = reused.keys.filter { index in
+                let labels = reused[index]?.candidateLabels ?? []
+                return labels.contains(where: { changedLabels.contains($0) })
+            }
+            for index in stale {
+                reused.removeValue(forKey: index)
+            }
+        }
 
         var blocks: [StyledBlock] = []
         blocks.reserveCapacity(structures.count)
         var reparsed = 0
+        var invalidated: [Range<Int>] = []
         for index in structures.indices {
             let structure = structures[index]
-            if let existing = spansByIndex[index] {
+            if let existing = reused[index] {
                 blocks.append(
                     StyledBlock(
                         startLine: structure.start,
                         endLine: structure.end,
                         kind: structure.kind,
-                        spans: existing
+                        spans: existing.spans,
+                        candidateLabels: existing.candidateLabels
                     )
                 )
             } else {
                 reparsed += 1
+                let styled = BlockStyler.style(
+                    bytes: bytes,
+                    lines: lines,
+                    startLine: structure.start,
+                    endLine: structure.end,
+                    kind: structure.kind,
+                    definedLabels: definedLabels
+                )
                 blocks.append(
                     StyledBlock(
                         startLine: structure.start,
                         endLine: structure.end,
                         kind: structure.kind,
-                        spans: BlockStyler.style(
-                            bytes: bytes,
-                            lines: lines,
-                            startLine: structure.start,
-                            endLine: structure.end,
-                            kind: structure.kind
-                        )
+                        spans: styled.spans,
+                        candidateLabels: styled.candidateLabels
                     )
                 )
+                if structure.start < structure.end {
+                    let start = lines[structure.start].utf16Start
+                    let end = lines[structure.end - 1].utf16End
+                    if end > start {
+                        invalidated.append(start..<end)
+                    }
+                }
             }
         }
 
@@ -93,6 +126,17 @@ public struct MarkdownHighlighter: Sendable {
         }
         spans.sort(by: spanPrecedes)
 
+        let utf16Count = lines.last.map { $0.utf16Start + $0.utf16Count + $0.newlineUTF16Count } ?? 0
+        let invalidatedRanges: [Range<Int>]
+        if previous == nil {
+            invalidatedRanges = utf16Count > 0 ? [0..<utf16Count] : []
+        } else {
+            if let editedUTF16, !editedUTF16.isEmpty {
+                invalidated.append(editedUTF16)
+            }
+            invalidatedRanges = mergeRanges(invalidated)
+        }
+
         return HighlightSnapshot(
             spans: spans,
             statistics: HighlightStatistics(
@@ -100,10 +144,17 @@ public struct MarkdownHighlighter: Sendable {
                 blocksReparsed: reparsed,
                 blocksReused: blocks.count - reparsed
             ),
+            invalidatedUTF16Ranges: invalidatedRanges,
             bytes: bytes,
             lines: lines,
-            blocks: blocks
+            blocks: blocks,
+            definedReferenceLabels: definedLabels
         )
+    }
+
+    private struct ReusedStyle {
+        var spans: [HighlightSpan]
+        var candidateLabels: [String]
     }
 
     private func reusePlan(
@@ -115,12 +166,12 @@ public struct MarkdownHighlighter: Sendable {
         editByteStart: Int,
         editByteEnd: Int,
         utf16Delta: Int
-    ) -> [Int: [HighlightSpan]] {
+    ) -> [Int: ReusedStyle] {
         guard let previous, previous.bytes.count + (editByteEnd - editByteStart) >= 0 else {
             return [:]
         }
         let byteDelta = (editByteEnd - editByteStart) - removedByteCount(previous: previous, editByteStart: editByteStart, editByteEnd: editByteEnd, newCount: bytes.count)
-        var spansByIndex: [Int: [HighlightSpan]] = [:]
+        var reused: [Int: ReusedStyle] = [:]
 
         var oldIndex = 0
         var newIndex = 0
@@ -130,7 +181,7 @@ public struct MarkdownHighlighter: Sendable {
                   blocksMatch(oldBlock, previous: previous, newRange: ranges[newIndex], newBytes: bytes, byteDelta: 0),
                   oldBlock.kind == structures[newIndex].kind
             else { break }
-            spansByIndex[newIndex] = oldBlock.spans
+            reused[newIndex] = ReusedStyle(spans: oldBlock.spans, candidateLabels: oldBlock.candidateLabels)
             oldIndex += 1
             newIndex += 1
         }
@@ -143,12 +194,15 @@ public struct MarkdownHighlighter: Sendable {
                   blocksMatch(oldBlock, previous: previous, newRange: ranges[newEnd - 1], newBytes: bytes, byteDelta: byteDelta),
                   oldBlock.kind == structures[newEnd - 1].kind
             else { break }
-            spansByIndex[newEnd - 1] = oldBlock.spans.map { $0.shifted(by: utf16Delta) }
+            reused[newEnd - 1] = ReusedStyle(
+                spans: oldBlock.spans.map { $0.shifted(by: utf16Delta) },
+                candidateLabels: oldBlock.candidateLabels
+            )
             oldEnd -= 1
             newEnd -= 1
         }
         _ = lines
-        return spansByIndex
+        return reused
     }
 
     private func removedByteCount(previous: HighlightSnapshot, editByteStart: Int, editByteEnd: Int, newCount: Int) -> Int {
@@ -170,6 +224,19 @@ public struct MarkdownHighlighter: Sendable {
         guard oldRange.upperBound <= previous.bytes.count, newRange.upperBound <= newBytes.count else { return false }
         return previous.bytes[oldRange] == newBytes[newRange]
     }
+}
+
+private func mergeRanges(_ ranges: [Range<Int>]) -> [Range<Int>] {
+    let sorted = ranges.filter { !$0.isEmpty }.sorted { $0.lowerBound < $1.lowerBound }
+    var merged: [Range<Int>] = []
+    for range in sorted {
+        if let last = merged.last, last.upperBound >= range.lowerBound {
+            merged[merged.count - 1] = last.lowerBound..<max(last.upperBound, range.upperBound)
+        } else {
+            merged.append(range)
+        }
+    }
+    return merged
 }
 
 private func spanPrecedes(_ lhs: HighlightSpan, _ rhs: HighlightSpan) -> Bool {
