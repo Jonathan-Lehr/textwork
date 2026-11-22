@@ -153,6 +153,8 @@ final class MarkdownHTMLTests: XCTestCase {
         XCTAssertTrue(document.contains("color-scheme: light dark"))
         XCTAssertTrue(document.contains("light-dark("))
         XCTAssertTrue(document.contains("h1 { font-size: 2rem;"))
+        XCTAssertTrue(document.contains("width: min(68ch, 100%)"))
+        XCTAssertTrue(document.contains("margin-inline: auto"))
         XCTAssertTrue(document.contains("h2 { font-size: 1.55rem;"))
         XCTAssertTrue(document.contains("script-src 'none'"))
         XCTAssertFalse(document.contains("<script"))

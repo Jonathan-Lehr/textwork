@@ -47,7 +47,12 @@ public struct MarkdownHTMLRenderer: Sendable {
       color: var(--text);
       font: 15px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
     }
-    article { padding: 28px 32px 48px; }
+    article {
+      box-sizing: border-box;
+      width: min(68ch, 100%);
+      margin-inline: auto;
+      padding: 28px 32px 48px;
+    }
     h1, h2, h3, h4, h5, h6 {
       line-height: 1.25;
       letter-spacing: -0.02em;

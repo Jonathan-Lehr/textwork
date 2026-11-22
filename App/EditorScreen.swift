@@ -10,18 +10,18 @@ struct EditorScreen: View {
 
     var body: some View {
         #if os(macOS)
-        HSplitView {
-            editor
-            PreviewCard(markdown: document.text, resourceDirectory: resourceDirectory)
-                .frame(minWidth: 280, idealWidth: 380, maxWidth: 560)
-        }
+        EditorPreviewSplitView(
+            editor: editor,
+            preview: PreviewCard(markdown: document.text, resourceDirectory: resourceDirectory)
+        )
         #else
         GeometryReader { geometry in
             if geometry.size.width >= 760 {
                 HStack(spacing: 0) {
                     editor
+                        .frame(minWidth: 320)
                     PreviewCard(markdown: document.text, resourceDirectory: resourceDirectory)
-                        .frame(width: min(420, geometry.size.width * 0.42))
+                        .frame(minWidth: 280, idealWidth: geometry.size.width * 0.42, maxWidth: .infinity)
                 }
             } else {
                 VStack(spacing: 0) {
