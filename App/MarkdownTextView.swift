@@ -23,7 +23,7 @@ struct MarkdownTextEditor: NSViewRepresentable {
         textView.isAutomaticLinkDetectionEnabled = false
         textView.isAutomaticTextReplacementEnabled = false
         textView.isAutomaticSpellingCorrectionEnabled = false
-        textView.enabledTextCheckingTypes = []
+        textView.enabledTextCheckingTypes = 0
         textView.font = HighlightColors.baseFont
         textView.textColor = HighlightColors.label
         textView.textContainerInset = NSSize(width: 8, height: 12)
@@ -62,6 +62,7 @@ struct MarkdownTextEditor: NSViewRepresentable {
             snapshot = highlighter.highlight(text.wrappedValue)
         }
 
+        @MainActor
         func replaceAll(_ replacement: String, in textView: NSTextView) {
             guard let storage = textView.textStorage else { return }
             isApplyingHighlight = true
@@ -92,7 +93,6 @@ struct MarkdownTextEditor: NSViewRepresentable {
 
         private func paint(_ spans: [HighlightSpan], in storage: NSTextStorage) {
             let fullRange = NSRange(location: 0, length: storage.length)
-            storage.undoManager?.disableUndoRegistration()
             storage.beginEditing()
             storage.setAttributes(HighlightColors.baseAttributes, range: fullRange)
             for span in spans where !span.isSyntax {
@@ -102,7 +102,6 @@ struct MarkdownTextEditor: NSViewRepresentable {
                 HighlightColors.applySyntax(span, to: storage)
             }
             storage.endEditing()
-            storage.undoManager?.enableUndoRegistration()
         }
     }
 }
@@ -212,6 +211,7 @@ struct MarkdownTextEditor: UIViewRepresentable {
             snapshot = highlighter.highlight(text.wrappedValue)
         }
 
+        @MainActor
         func replaceAll(_ replacement: String, in textView: UITextView) {
             let storage = textView.textStorage
             isApplyingHighlight = true
@@ -241,7 +241,6 @@ struct MarkdownTextEditor: UIViewRepresentable {
 
         private func paint(_ spans: [HighlightSpan], in storage: NSTextStorage) {
             let fullRange = NSRange(location: 0, length: storage.length)
-            storage.undoManager?.disableUndoRegistration()
             storage.beginEditing()
             storage.setAttributes(HighlightColors.baseAttributes, range: fullRange)
             for span in spans where !span.isSyntax {
@@ -251,7 +250,6 @@ struct MarkdownTextEditor: UIViewRepresentable {
                 HighlightColors.applySyntax(span, to: storage)
             }
             storage.endEditing()
-            storage.undoManager?.enableUndoRegistration()
         }
     }
 }
