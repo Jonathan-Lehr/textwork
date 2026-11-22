@@ -15,7 +15,7 @@ The app links `TextworkEditor` and nothing else. That library highlights with a 
 
 `swift-markdown` 0.9.0 (Apache 2.0, cmark-gfm) is a development dependency of the `TextworkHighlightOracle` and `TextworkEditorBench` targets. It is not a product of the app target. We keep it so tests and the benchmark can compare a full CommonMark and GitHub-flavored parse. That is the decision record for this third-party package: it is justified for measurement, and it does not ship.
 
-`AttributedString(markdown:)` is not the editor highlighter. It drops the markers. The read-only preview may use it because the preview is rendered text, not the source.
+`AttributedString(markdown:)` is not the editor highlighter. It drops the markers. The read-only preview does not use it either. [ADR 0005](0005-html-preview.md) renders Markdown to HTML so headings, lists, quotes, and tables keep their structure.
 
 tree-sitter is not a dependency. We did not get a measured build; see the spike.
 

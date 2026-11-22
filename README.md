@@ -17,7 +17,7 @@ This repository is the project skeleton plus a syntax-highlighting spike. The pr
 | Path | What it is |
 | --- | --- |
 | `App/` | SwiftUI document app |
-| `Packages/TextworkEditor` | Highlighter library, tests, and benchmark |
+| `Packages/TextworkEditor` | Highlighter, HTML renderer, tests, and benchmark |
 | `docs/decisions/` | Architecture decision records |
 | `docs/spikes/highlighting.md` | Highlighting spike write-up |
 | `Config/Textwork.entitlements` | iCloud Drive entitlements, not yet attached to the target |
@@ -51,4 +51,4 @@ The app is document-based (`DocumentGroup`), which is the AppKit and UIKit path 
 
 ## Highlighting
 
-The editor highlights raw Markdown with a hand-rolled incremental line and block highlighter in `TextworkEditor`. The read-only preview uses `AttributedString(markdown:)`, which is a different surface and is not editable. The comparison with swift-markdown, and why tree-sitter was not measured, is in [docs/spikes/highlighting.md](docs/spikes/highlighting.md).
+The editor highlights raw Markdown with a hand-rolled incremental line and block highlighter in `TextworkEditor`. The read-only preview renders HTML from `MarkdownHTMLRenderer` in the same package, inside a web view that is not editable. The comparison with swift-markdown, and why tree-sitter was not measured, is in [docs/spikes/highlighting.md](docs/spikes/highlighting.md). The preview decision is [ADR 0005](docs/decisions/0005-html-preview.md).

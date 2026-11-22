@@ -42,7 +42,7 @@ The library reparses the whole document. It has no edit API, so a keystroke cost
 
 On Apple platforms, `AttributedString(markdown:)` parses Markdown into rendered text. The markers are gone: `*emphasized*` becomes `emphasized`. `appliesSourcePositionAttributes` records where the rendered run came from in the source, and that position skips the marker characters. That is useful for a preview. It cannot color the `#` or the backticks in the buffer the user is editing.
 
-The read-only preview card uses this API. A unit test on macOS asserts that the markers are absent and that a source-position attribute exists. The Linux test run skips that test. The benchmark times the conversion only on the macOS runner, in `attributedStringMarkdown`. If that array is empty, the run was not on Apple platforms.
+The read-only preview card used this API when the spike was written. [ADR 0005](../decisions/0005-html-preview.md) replaces that preview with HTML. A unit test on macOS asserts that the markers are absent and that a source-position attribute exists. The Linux test run skips that test. The benchmark times the conversion only on the macOS runner, in `attributedStringMarkdown`. If that array is empty, the run was not on Apple platforms.
 
 ### tree-sitter-markdown (not measured)
 
@@ -68,4 +68,4 @@ No other machine's timings are in this table. A debug build on Linux was used on
 
 ## Recommendation
 
-Use the hand-rolled highlighter in the app. It is incremental, it labels syntax for modes 2 and 3, and the app binary does not take a third-party parser. Keep swift-markdown as the oracle and the benchmark comparison. Keep `AttributedString(markdown:)` for the preview only. Do not add tree-sitter unless a later measurement shows the hand-rolled keystroke path missing frames on a 1 MB file after painting is included, and a matched tree-sitter build beats it by enough to justify the C dependency.
+Use the hand-rolled highlighter in the app. It is incremental, it labels syntax for modes 2 and 3, and the app binary does not take a third-party parser. Keep swift-markdown as the oracle and the benchmark comparison. The preview no longer uses `AttributedString(markdown:)`; see ADR 0005. Do not add tree-sitter unless a later measurement shows the hand-rolled keystroke path missing frames on a 1 MB file after painting is included, and a matched tree-sitter build beats it by enough to justify the C dependency.

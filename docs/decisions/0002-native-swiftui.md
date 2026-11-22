@@ -21,4 +21,4 @@ Prefer Apple frameworks. Any third-party dependency needs its own decision recor
 
 ## Consequences
 
-One Xcode target builds Mac and iPad. The editor engine stays in a Swift package so tests do not need a window. We do not get a custom keybinding UI, a web view, or a third-party text component. Printing and PDF later go through the system print path rather than a PDF library.
+One Xcode target builds Mac and iPad. The editor engine stays in a Swift package so tests do not need a window. We do not get a custom keybinding UI or a third-party text component. The editor stays TextKit 2. The read-only preview is a `WKWebView`, recorded in [ADR 0005](0005-html-preview.md), because rendered Markdown needs block layout. Printing and PDF later go through the system print path rather than a PDF library.
