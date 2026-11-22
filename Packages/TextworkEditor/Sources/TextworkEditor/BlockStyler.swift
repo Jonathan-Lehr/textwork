@@ -261,6 +261,13 @@ private func styleFence(
     endLine: Int,
     into spans: inout [HighlightSpan]
 ) {
+    let language = startLine < endLine
+        ? FencedCodeTokenizer.language(
+            onOpeningFence: bytes,
+            range: lines[startLine].byteStart..<lines[startLine].contentByteEnd
+        )
+        : nil
+    var scanState = FencedCodeScanState()
     for lineIndex in startLine..<endLine {
         let line = lines[lineIndex]
         let range = line.byteStart..<line.contentByteEnd
@@ -269,6 +276,17 @@ private func styleFence(
             append(range, role: .codeBlock, isSyntax: true, bytes: bytes, lines: lines, into: &spans)
         default:
             append(range, role: .codeBlock, isSyntax: false, bytes: bytes, lines: lines, into: &spans)
+            if let language {
+                let tokens = FencedCodeTokenizer.tokens(
+                    bytes: bytes,
+                    range: range,
+                    language: language,
+                    state: &scanState
+                )
+                for token in tokens {
+                    append(token.byteRange, role: token.role, isSyntax: false, bytes: bytes, lines: lines, into: &spans)
+                }
+            }
         }
     }
 }

@@ -15,6 +15,13 @@ public enum HighlightRole: String, Codable, Sendable, Equatable, CaseIterable {
     case strong
     case codeSpan
     case codeBlock
+    case codeKeyword
+    case codeString
+    case codeNumber
+    case codeComment
+    case codeType
+    case codeTag
+    case codeAttribute
     case link
     case image
     case listMarker
