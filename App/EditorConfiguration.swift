@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import TextworkEditor
 
 /// Typography the editor can show today and that preferences can replace later.
 ///
@@ -23,8 +24,10 @@ struct EditorTypography: Equatable, Sendable {
 /// Values shared by the Mac text view and the iPad text view.
 ///
 /// This is ordinary Swift. There is no plist, JSON, or other runtime file.
+/// `theme` is the light and dark palette the highlighter's roles paint with.
 struct EditorConfiguration: Equatable, Sendable {
     var typography: EditorTypography
+    var theme: HighlightTheme
     var horizontalInset: CGFloat
     var verticalInset: CGFloat
     /// When false, the text view does not rewrite quotes, dashes, or links as the user types.
@@ -33,6 +36,7 @@ struct EditorConfiguration: Equatable, Sendable {
 
     static let standard = EditorConfiguration(
         typography: .standard,
+        theme: .standard,
         horizontalInset: 8,
         verticalInset: 12,
         allowsAutomaticSubstitution: false,
@@ -64,7 +68,7 @@ extension EditorConfiguration {
             textView.enabledTextCheckingTypes = 0
         }
         textView.font = bodyFont()
-        textView.textColor = NSColor.labelColor
+        textView.textColor = theme.bodyPlatformColor
         textView.defaultParagraphStyle = paragraphStyle()
         textView.typingAttributes = attributes
         textView.textContainerInset = NSSize(width: horizontalInset, height: verticalInset)
@@ -83,7 +87,7 @@ extension EditorConfiguration {
     func baseAttributes() -> [NSAttributedString.Key: Any] {
         [
             .font: bodyFont(),
-            .foregroundColor: NSColor.labelColor,
+            .foregroundColor: theme.bodyPlatformColor,
             .paragraphStyle: paragraphStyle(),
         ]
     }
@@ -128,7 +132,7 @@ extension EditorConfiguration {
         textView.autocorrectionType = allowsSpellingCorrection ? .default : .no
         textView.spellCheckingType = allowsSpellingCorrection ? .default : .no
         textView.font = bodyFont()
-        textView.textColor = .label
+        textView.textColor = theme.bodyPlatformColor
         textView.typingAttributes = baseAttributes()
         textView.textContainerInset = UIEdgeInsets(
             top: verticalInset,
@@ -141,7 +145,7 @@ extension EditorConfiguration {
     func baseAttributes() -> [NSAttributedString.Key: Any] {
         [
             .font: bodyFont(),
-            .foregroundColor: UIColor.label,
+            .foregroundColor: theme.bodyPlatformColor,
             .paragraphStyle: paragraphStyle(),
         ]
     }

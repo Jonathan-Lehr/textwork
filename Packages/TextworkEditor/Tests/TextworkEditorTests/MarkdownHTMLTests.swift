@@ -190,7 +190,7 @@ final class MarkdownHTMLTests: XCTestCase {
         XCTAssertTrue(document.contains("<h1>Title</h1>"))
         XCTAssertTrue(document.contains("<h2>Section</h2>"))
         XCTAssertTrue(document.contains("color-scheme: light dark"))
-        XCTAssertTrue(document.contains("light-dark("))
+        XCTAssertTrue(document.contains("@media (prefers-color-scheme: dark)"))
         XCTAssertTrue(document.contains("h1 { font-size: 2rem;"))
         XCTAssertTrue(document.contains("width: min(68ch, 100%)"))
         XCTAssertTrue(document.contains("margin-inline: auto"))
