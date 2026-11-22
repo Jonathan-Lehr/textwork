@@ -21,4 +21,6 @@ tree-sitter is not a dependency. We did not get a measured build; see the spike.
 
 ## Consequences
 
-The editor binary does not vendor cmark or tree-sitter. Mode 2 and mode 3 can be painted from `isSyntax` without a new parse. The hand-rolled grammar is not a full CommonMark implementation: reference links, raw HTML, and some delimiter edge cases are plain text. If a manuscript hits those gaps often, the next step is to re-parse the dirty block with swift-markdown rather than to adopt tree-sitter. Revisit this decision if the macOS benchmark shows a middle-of-document keystroke in a 1 MB file taking longer than a frame after attribute painting is included.
+The editor binary does not vendor cmark or tree-sitter. Mode 2 and mode 3 can be painted from `isSyntax` without a new parse. The hand-rolled grammar is not a full CommonMark implementation: reference links, raw HTML, and some delimiter edge cases are plain text. If a manuscript hits those gaps often, the next step is to re-parse the dirty block with swift-markdown rather than to adopt tree-sitter.
+
+On the macOS runner (see the spike for the run id), a middle-of-document keystroke reparsed one block. That cost was 0.110 ms at 10 KB, 0.988 ms at 100 KB, and 10.1 ms at 1 MB. A full swift-markdown parse of the 1 MB file was 595 ms. Painting every span in AppKit, which the prototype still does, was 81.7 ms at 1 MB. The follow-up is to paint only the invalidated range. The parse itself is not what misses a frame.

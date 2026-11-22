@@ -52,15 +52,19 @@ We did not link a package and did not record timings. `SwiftTreeSitter` 0.25 dep
 
 ## Results
 
-The table is filled from `benchmark-results.json` produced by `.github/workflows/macos.yml`. Each cell is the median of the release-build samples. The 1 MB cases use 9 iterations. The smaller cases use 15. The 95th percentile is the `percentile95Milliseconds` field in the JSON artifact and is not repeated here unless it changes the conclusion.
+These medians are from the release build of `TextworkEditorBench` on GitHub Actions run `45067626906` (push of `8a32e12`, job `build-test`, macOS workflow). The artifact is `highlighting-benchmarks`. The runner was macOS 26.7.2 (build 25G332), arm64, 3 processors, Xcode 26.6 (17F113), Apple Swift 6.3.3. The 10 KB and 100 KB rows used 15 iterations. The 1 MB row used 9. The 95th percentile is in the artifact and does not change the ranking.
 
 | Document | Hand-rolled full highlight | Hand-rolled keystroke | Blocks reparsed / reused | swift-markdown full parse (this is also its keystroke cost) | AttributedString conversion | AppKit paint of every span |
 | --- | --- | --- | --- | --- | --- | --- |
-| ~10 KB | pending macOS CI | pending macOS CI | pending macOS CI | pending macOS CI | pending macOS CI | pending macOS CI |
-| ~100 KB | pending macOS CI | pending macOS CI | pending macOS CI | pending macOS CI | pending macOS CI | pending macOS CI |
-| ~1 MB | pending macOS CI | pending macOS CI | pending macOS CI | pending macOS CI | pending macOS CI | pending macOS CI |
+| 9,973 bytes | 1.69 ms | 0.110 ms | 1 / 238 of 239 | 8.05 ms | 21.1 ms | 2.15 ms |
+| 99,924 bytes | 22.5 ms | 0.988 ms | 1 / 2,387 of 2,388 | 57.5 ms | 188 ms | 6.86 ms |
+| 999,989 bytes | 208 ms | 10.1 ms | 1 / 23,890 of 23,891 | 595 ms | 1,652 ms | 81.7 ms |
 
-Host, Swift version, iteration counts, and p95 values are in the same artifact, next to `swift-version.txt` from that job. Do not replace this table with timings from any other machine.
+`AttributedString` also shows the source is consumed. At 9,973 source characters the rendered string was 5,957 characters. The same ratio holds at the larger sizes. That conversion was measured on this Mac run. It does not run on Linux, where the unit test is skipped.
+
+Painting is separate from parsing. The prototype still replaces attributes for every span after an edit. At about 1 MB that paint is 81.7 ms, larger than the 10.1 ms incremental parse. A shipping editor should repaint the invalidated range. That does not change the parser choice: a full swift-markdown parse of the same file is 595 ms before any painting.
+
+No other machine's timings are in this table. A debug build on Linux was used only to see that the executable ran. Those numbers are not recorded here.
 
 ## Recommendation
 

@@ -73,7 +73,7 @@ struct MarkdownTextEditor: NSViewRepresentable {
 
         func textStorage(
             _ textStorage: NSTextStorage,
-            didProcessEditing editedMask: NSTextStorage.EditActions,
+            didProcessEditing editedMask: NSTextStorageEditActions,
             range editedRange: NSRange,
             changeInLength delta: Int
         ) {
@@ -223,7 +223,7 @@ struct MarkdownTextEditor: UIViewRepresentable {
 
         func textStorage(
             _ textStorage: NSTextStorage,
-            didProcessEditing editedMask: NSTextStorage.EditActions,
+            didProcessEditing editedMask: NSTextStorageEditActions,
             range editedRange: NSRange,
             changeInLength delta: Int
         ) {
