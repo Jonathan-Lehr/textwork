@@ -1,0 +1,48 @@
+name: macOS
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app
+
+      - name: Record toolchain
+        run: |
+          swift --version | tee swift-version.txt
+          sw_vers | tee -a swift-version.txt
+          xcodebuild -version | tee -a swift-version.txt
+
+      - name: Test editor package
+        run: swift test --package-path Packages/TextworkEditor
+
+      - name: Benchmark highlighting
+        run: swift run -c release --package-path Packages/TextworkEditor TextworkEditorBench | tee benchmark-results.json
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: highlighting-benchmarks
+          path: |
+            benchmark-results.json
+            swift-version.txt
+
+      - name: Build macOS app
+        run: |
+          xcodebuild \
+            -project Textwork.xcodeproj \
+            -scheme Textwork \
+            -destination 'platform=macOS' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            build
