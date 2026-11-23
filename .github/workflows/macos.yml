@@ -2,6 +2,8 @@ name: macOS
 
 on:
   push:
+    branches:
+      - main
   pull_request:
 
 concurrency:
@@ -62,5 +64,4 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
             GCC_TREAT_WARNINGS_AS_ERRORS=YES \
-            SWIFT_SUPPRESS_WARNINGS=NO \
-            SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) TEXTWORK_SKIP_TEXT_VIEW_TESTS'
+            SWIFT_SUPPRESS_WARNINGS=NO

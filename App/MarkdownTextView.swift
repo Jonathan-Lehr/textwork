@@ -192,10 +192,15 @@ struct MarkdownTextEditor: NSViewRepresentable {
         private func scheduleTypingAttributeRestore() {
             guard !isTypingAttributeRestoreScheduled else { return }
             isTypingAttributeRestoreScheduled = true
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.isTypingAttributeRestoreScheduled = false
-                self.applyTypingAttributes()
+            // A main-actor Task can run inside AppKit's nested run loop, while
+            // the selection still covers the deleted text. The main queue runs
+            // this only after that call stack returns.
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.isTypingAttributeRestoreScheduled = false
+                    self.applyTypingAttributes()
+                }
             }
         }
 
@@ -397,10 +402,15 @@ struct MarkdownTextEditor: UIViewRepresentable {
         private func scheduleTypingAttributeRestore() {
             guard !isTypingAttributeRestoreScheduled else { return }
             isTypingAttributeRestoreScheduled = true
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.isTypingAttributeRestoreScheduled = false
-                self.applyTypingAttributes()
+            // A main-actor Task can run inside AppKit's nested run loop, while
+            // the selection still covers the deleted text. The main queue runs
+            // this only after that call stack returns.
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.isTypingAttributeRestoreScheduled = false
+                    self.applyTypingAttributes()
+                }
             }
         }
 

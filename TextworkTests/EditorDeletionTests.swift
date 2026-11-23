@@ -6,6 +6,19 @@ import XCTest
 final class EditorDeletionTests: XCTestCase {
     private var documentText = ""
 
+    override func setUp() async throws {
+        try await super.setUp()
+        let application = NSApplication.shared
+        if application.activationPolicy() != .accessory {
+            application.setActivationPolicy(.accessory)
+        }
+        // xctest does not finish launching the application. On the GitHub
+        // runner, making a window key before this returns aborts the process.
+        if !application.isRunning {
+            application.finishLaunching()
+        }
+    }
+
     func testNewDocumentStartsEmpty() {
         XCTAssertEqual(MarkdownDocument().text, "")
         XCTAssertFalse(MarkdownDocument.markdownGuide.isEmpty)
@@ -13,8 +26,7 @@ final class EditorDeletionTests: XCTestCase {
         XCTAssertTrue(MarkdownDocument.markdownGuide.contains("inline code"))
     }
 
-    func testDeletingTheSelectionThenTyping() async throws {
-        try skipWhenTheRunnerExitsOnTextViews()
+    func testDeletingTheSelectionThenTyping() async {
         let harness = makeHarness(text: "# Heading\n\nBody with *emphasis*.")
         defer { harness.close() }
         harness.textView.selectAll(nil)
@@ -32,14 +44,19 @@ final class EditorDeletionTests: XCTestCase {
         assertStoredFontIsBody(harness.textView, configuration: harness.configuration)
     }
 
-    func testDeletingEveryCharacterThenTyping() async throws {
-        try skipWhenTheRunnerExitsOnTextViews()
+    func testDeletingEveryCharacterThenTyping() async {
         let harness = makeHarness(text: "# Heading")
         defer { harness.close() }
         let length = (harness.textView.string as NSString).length
         harness.textView.setSelectedRange(NSRange(location: length, length: 0))
+        var remaining = length
         while !harness.textView.string.isEmpty {
+            let before = (harness.textView.string as NSString).length
             harness.textView.deleteBackward(nil)
+            let after = (harness.textView.string as NSString).length
+            XCTAssertLessThan(after, before)
+            remaining -= 1
+            XCTAssertGreaterThanOrEqual(remaining, 0)
         }
         XCTAssertEqual(harness.textView.string, "")
         XCTAssertEqual(documentText, "")
@@ -49,8 +66,7 @@ final class EditorDeletionTests: XCTestCase {
         XCTAssertEqual(documentText, "Hello")
     }
 
-    func testEmptyDocumentAcceptsTyping() async throws {
-        try skipWhenTheRunnerExitsOnTextViews()
+    func testEmptyDocumentAcceptsTyping() async {
         let harness = makeHarness(text: "")
         defer { harness.close() }
         harness.textView.insertText("Hello", replacementRange: NSRange(location: 0, length: 0))
@@ -58,44 +74,30 @@ final class EditorDeletionTests: XCTestCase {
         XCTAssertEqual(documentText, "Hello")
     }
 
-    /// The macOS runner exits the test process when these cases create a text
-    /// view. Continuous integration compiles them out with
-    /// `TEXTWORK_SKIP_TEXT_VIEW_TESTS`. Locally, the text view is first
-    /// responder so the font panel reads the selection.
-    private func skipWhenTheRunnerExitsOnTextViews() throws {
-        #if TEXTWORK_SKIP_TEXT_VIEW_TESTS
-        throw XCTSkip("The macOS runner exits when the editor tests create a text view.")
-        #else
-        if ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" {
-            throw XCTSkip("The macOS runner exits when the editor tests create a text view.")
-        }
-        #endif
-    }
-
     private func makeHarness(text: String) -> EditorHarness {
         documentText = text
         let editor = MarkdownTextEditor(text: Binding(get: { self.documentText }, set: { self.documentText = $0 }))
         let coordinator = editor.makeCoordinator()
         let textView = NSTextView(usingTextLayoutManager: true)
-        textView.frame = NSRect(x: 0, y: 0, width: 640, height: 800)
+        textView.frame = NSRect(x: 0, y: 0, width: 640, height: 360)
         editor.configuration.apply(to: textView)
         textView.textStorage?.delegate = coordinator
         coordinator.textView = textView
-        coordinator.replaceAll(text, in: textView)
 
-        let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 640, height: 360))
+        let scrollView = NSScrollView(frame: textView.frame)
         scrollView.hasVerticalScroller = true
         scrollView.documentView = textView
         let window = NSWindow(
             contentRect: scrollView.frame,
-            styleMask: [.titled, .resizable],
+            styleMask: [.borderless],
             backing: .buffered,
             defer: false
         )
+        window.isReleasedWhenClosed = false
         window.contentView = scrollView
-        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
         XCTAssertTrue(window.makeFirstResponder(textView))
-        XCTAssertTrue(window.firstResponder === textView)
+        coordinator.replaceAll(text, in: textView)
         return EditorHarness(
             textView: textView,
             window: window,
@@ -104,9 +106,13 @@ final class EditorDeletionTests: XCTestCase {
         )
     }
 
+    /// The editor restores typing attributes on a later main-actor turn so the
+    /// font panel does not read a selection that the delete has not updated yet.
     private func waitForTypingAttributeRestore() async {
-        for _ in 0..<8 {
-            await Task.yield()
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async {
+                continuation.resume()
+            }
         }
     }
 
@@ -142,6 +148,7 @@ private final class EditorHarness {
 
     func close() {
         textView.textStorage?.delegate = nil
+        window.orderOut(nil)
         window.close()
     }
 }
