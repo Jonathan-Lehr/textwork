@@ -97,7 +97,11 @@ public struct HighlightRunStyle: Equatable, Sendable {
 /// Emphasis, strong, and inline code markers are a quieter gray. Reference
 /// links use the link role. Unknown fenced languages keep the code color.
 /// Swift, JSON, shell, and HTML fences add keyword, string, number, comment,
-/// type, tag, and attribute colors. Inline code sits on ``inlineCodeBackground``.
+/// type, tag, and attribute colors from Xcode's Default (Light) and Default
+/// (Dark) themes. Tag names use the keyword color, which is how Xcode
+/// classifies an HTML tag. Plain code is that theme's plain text at 85 percent
+/// opacity, resolved on the editor background. Marker colors are a quieter
+/// tint of the same hue. Inline code sits on ``inlineCodeBackground``.
 ///
 /// The text views turn these into dynamic `NSColor` and `UIColor` values, so
 /// the same attributes follow the system appearance.
@@ -128,11 +132,13 @@ public struct HighlightTheme: Equatable, Sendable {
         let heading = HighlightRoleColors(content: body, syntax: headingSyntax)
         let emphasis = HighlightRoleColors(content: body, syntax: marker)
         let strong = HighlightRoleColors(content: body, syntax: marker)
+        // Xcode plain text is black or white at 85 percent opacity.
+        // Resolved on white and #1E1E1E so the preview color matches the editor.
         let code = roleColors(
-            contentLight: (0xA8, 0x28, 0x4A),
-            contentDark: (0xFF, 0xA0, 0xB8),
-            syntaxLight: (0xB9, 0x51, 0x6C),
-            syntaxDark: (0xB6, 0x76, 0x86)
+            contentLight: (0x26, 0x26, 0x26),
+            contentDark: (0xDD, 0xDD, 0xDD),
+            syntaxLight: (0x74, 0x74, 0x74),
+            syntaxDark: (0x88, 0x88, 0x88)
         )
         let inlineCode = HighlightRoleColors(content: body, syntax: marker)
         let link = roleColors(
@@ -178,46 +184,48 @@ public struct HighlightTheme: Equatable, Sendable {
             syntaxDark: (0x62, 0x93, 0x6E)
         )
         let codeKeyword = roleColors(
-            contentLight: (0x1A, 0x4F, 0xC4),
-            contentDark: (0x8E, 0xB4, 0xFF),
-            syntaxLight: (0x46, 0x70, 0xCF),
-            syntaxDark: (0x6E, 0x88, 0xBE)
+            contentLight: (0x9B, 0x23, 0x93),
+            contentDark: (0xFC, 0x5F, 0xA3),
+            syntaxLight: (0xAE, 0x4E, 0xA8),
+            syntaxDark: (0xDF, 0x56, 0x91)
         )
         let codeString = roleColors(
-            contentLight: (0x14, 0x62, 0x28),
-            contentDark: (0x86, 0xD9, 0x96),
-            syntaxLight: (0x43, 0x81, 0x53),
-            syntaxDark: (0x60, 0x94, 0x6A)
+            contentLight: (0xC4, 0x1A, 0x16),
+            contentDark: (0xFC, 0x6A, 0x5D),
+            syntaxLight: (0xCE, 0x41, 0x3D),
+            syntaxDark: (0xDD, 0x60, 0x54)
         )
         let codeNumber = roleColors(
-            contentLight: (0x8A, 0x4E, 0x00),
-            contentDark: (0xF0, 0xB4, 0x5C),
-            syntaxLight: (0x9C, 0x69, 0x26),
-            syntaxDark: (0xA9, 0x81, 0x47)
+            contentLight: (0x1C, 0x00, 0xCF),
+            contentDark: (0xD0, 0xBF, 0x69),
+            syntaxLight: (0x71, 0x60, 0xE1),
+            syntaxDark: (0x94, 0x89, 0x50)
         )
+        // Xcode's dark comment is #6C7986. Lightened so its quieter marker still clears contrast.
         let codeComment = roleColors(
-            contentLight: (0x5A, 0x5A, 0x60),
-            contentDark: (0xA3, 0xA3, 0xA8),
-            syntaxLight: (0x73, 0x73, 0x78),
-            syntaxDark: (0x88, 0x88, 0x8C)
+            contentLight: (0x5D, 0x6C, 0x79),
+            contentDark: (0x84, 0x95, 0xA5),
+            syntaxLight: (0x6C, 0x79, 0x85),
+            syntaxDark: (0x77, 0x86, 0x93)
         )
         let codeType = roleColors(
-            contentLight: (0x0E, 0x6F, 0x86),
-            contentDark: (0x79, 0xD0, 0xE4),
-            syntaxLight: (0x26, 0x7D, 0x92),
-            syntaxDark: (0x58, 0x90, 0x9D)
+            contentLight: (0x1C, 0x46, 0x4A),
+            contentDark: (0x9E, 0xF1, 0xDD),
+            syntaxLight: (0x5A, 0x79, 0x7B),
+            syntaxDark: (0x64, 0x91, 0x87)
         )
         let codeTag = roleColors(
-            contentLight: (0x7A, 0x2F, 0x8A),
-            contentDark: (0xE0, 0xA0, 0xEC),
-            syntaxLight: (0x97, 0x5D, 0xA4),
-            syntaxDark: (0xA6, 0x79, 0xAE)
+            contentLight: (0x9B, 0x23, 0x93),
+            contentDark: (0xFC, 0x5F, 0xA3),
+            syntaxLight: (0xAE, 0x4E, 0xA8),
+            syntaxDark: (0xDF, 0x56, 0x91)
         )
+        // Xcode's dark attribute is #BF8555. Lightened by one step so its quieter marker still clears contrast.
         let codeAttribute = roleColors(
-            contentLight: (0x9A, 0x4E, 0x12),
-            contentDark: (0xF0, 0xB0, 0x7A),
-            syntaxLight: (0xA6, 0x63, 0x2E),
-            syntaxDark: (0xAB, 0x80, 0x5C)
+            contentLight: (0x81, 0x5F, 0x03),
+            contentDark: (0xC0, 0x86, 0x55),
+            syntaxLight: (0x8E, 0x70, 0x1D),
+            syntaxDark: (0xAC, 0x79, 0x4E)
         )
         let roles: [HighlightRole: HighlightRoleColors] = [
             .heading1: heading,
