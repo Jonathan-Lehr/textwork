@@ -76,9 +76,15 @@ final class EditorDeletionTests: XCTestCase {
             defer: false
         )
         window.contentView = scrollView
-        window.makeKeyAndOrderFront(nil)
-        XCTAssertTrue(window.makeFirstResponder(textView))
-        XCTAssertTrue(window.firstResponder === textView)
+        // GitHub's macOS runner has no interactive window session. Ordering a
+        // window front there exits the test process. Edits still go through
+        // the text storage delegate. A local run makes the text view first
+        // responder so the font panel reads the selection, which is the crash.
+        if ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != "true" {
+            window.makeKeyAndOrderFront(nil)
+            XCTAssertTrue(window.makeFirstResponder(textView))
+            XCTAssertTrue(window.firstResponder === textView)
+        }
         return EditorHarness(
             textView: textView,
             window: window,
