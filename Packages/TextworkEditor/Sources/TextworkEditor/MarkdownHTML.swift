@@ -37,11 +37,9 @@ public struct MarkdownHTMLRenderer: Sendable {
     /// 14px by 16px of padding, in light and dark. Emphasis and strong inherit
     /// the body color. Heading sizes stay as they are. The article max width
     /// is 78.2ch, 15% wider than 68ch. Fenced code is 1pt larger than 12.9px
-    /// (0.86rem at the 15px root). Its line height is 4pt tighter than
-    /// 18.705px, and that length is set on `pre` as well as `pre code`.
-    /// `pre` is the block that forms the line boxes; `code` inside it is
-    /// inline unless displayed as a block, so a line height only on `pre code`
-    /// does not move the baselines.
+    /// (0.86rem at the 15px root). Its line height is 1.2, about 17.08px,
+    /// on both `pre` and `pre code`. `pre code` is a block so that length
+    /// forms the line boxes.
     public static let stylesheet: String = {
         let theme = HighlightTheme.standard
         return """
@@ -99,7 +97,8 @@ public struct MarkdownHTMLRenderer: Sendable {
           border-radius: 5px;
           overflow: auto;
           margin: 0 0 0.9em;
-          line-height: calc(18.705px - 4pt);
+          font-size: calc(12.9px + 1pt);
+          line-height: 1.2;
         }
         pre code {
           display: block;
@@ -107,8 +106,8 @@ public struct MarkdownHTMLRenderer: Sendable {
           background: none;
           padding: 0;
           border-radius: 0;
-          font-size: calc(12.9px + 1pt);
-          line-height: calc(18.705px - 4pt);
+          font-size: inherit;
+          line-height: 1.2;
         }
         .code-keyword { color: var(--code-keyword); }
         .code-string { color: var(--code-string); }

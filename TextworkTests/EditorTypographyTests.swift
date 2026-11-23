@@ -157,9 +157,9 @@ final class EditorTypographyTests: XCTestCase {
         let codeLineHeight = try XCTUnwrap(metrics["codeLineHeight"] as? Double)
         let preLineHeight = try XCTUnwrap(metrics["preLineHeight"] as? Double)
         let pitch = try XCTUnwrap(metrics["linePitch"] as? Double)
-        XCTAssertEqual(codeLineHeight, 13.372, accuracy: 0.2, "pre code computed line-height")
-        XCTAssertEqual(preLineHeight, 13.372, accuracy: 0.2, "pre computed line-height")
-        XCTAssertEqual(pitch, 13.372, accuracy: 0.75, "baseline pitch \(metrics)")
+        XCTAssertEqual(codeLineHeight, 17.08, accuracy: 0.2, "pre code computed line-height")
+        XCTAssertEqual(preLineHeight, 17.08, accuracy: 0.2, "pre computed line-height")
+        XCTAssertEqual(pitch, 17.08, accuracy: 0.75, "baseline pitch \(metrics)")
     }
 
     func testWriteTypographySnapshotsWhenRequested() async throws {
