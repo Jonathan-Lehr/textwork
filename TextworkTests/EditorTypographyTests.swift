@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import TextworkEditor
 import WebKit
 import XCTest
 
@@ -113,6 +114,30 @@ final class EditorTypographyTests: XCTestCase {
         XCTAssertEqual(fencedCode.fontName, "Menlo-Regular")
         XCTAssertEqual(fencedCode.pointSize, body.pointSize)
 
+        let theme = editor.configuration.theme
+        let inlineLocation = (text as NSString).range(of: "inline").location
+        assertPaintedColor(
+            storage.attribute(.foregroundColor, at: inlineLocation, effectiveRange: nil) as? NSColor,
+            matches: theme.body,
+            "Inline code uses the body text color"
+        )
+        assertPaintedColor(
+            storage.attribute(.backgroundColor, at: inlineLocation, effectiveRange: nil) as? NSColor,
+            matches: theme.inlineCodeBackground,
+            "Inline code keeps its chip"
+        )
+        assertPaintedColor(
+            storage.attribute(.foregroundColor, at: inlineLocation - 1, effectiveRange: nil) as? NSColor,
+            matches: theme.color(for: .codeSpan, isSyntax: true),
+            "Inline code markers stay quieter than the words"
+        )
+        let answerLocation = (text as NSString).range(of: "answer").location
+        assertPaintedColor(
+            storage.attribute(.foregroundColor, at: answerLocation, effectiveRange: nil) as? NSColor,
+            matches: theme.color(for: .codeBlock, isSyntax: false),
+            "Fenced code keeps the code color"
+        )
+
         XCTAssertEqual(textView.font?.fontName, "Menlo-Regular")
         XCTAssertEqual(textView.defaultParagraphStyle?.lineSpacing, 2)
     }
@@ -128,11 +153,13 @@ final class EditorTypographyTests: XCTestCase {
         }
         let folder = URL(fileURLWithPath: directory, isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let editorURL = folder.appendingPathComponent("editor_menlo.png")
-        let previewURL = folder.appendingPathComponent("preview_column.png")
+        let editorURL = folder.appendingPathComponent("editor_inline_code.png")
+        let previewLightURL = folder.appendingPathComponent("preview_inline_code_light.png")
+        let previewDarkURL = folder.appendingPathComponent("preview_inline_code_dark.png")
         try writeEditorImage(to: editorURL)
-        try await writePreviewImage(to: previewURL)
-        for url in [editorURL, previewURL] {
+        try await writePreviewImage(to: previewLightURL, appearance: .aqua)
+        try await writePreviewImage(to: previewDarkURL, appearance: .darkAqua)
+        for url in [editorURL, previewLightURL, previewDarkURL] {
             let data = try Data(contentsOf: url)
             XCTAssertGreaterThan(data.count, 1000, url.lastPathComponent)
         }
@@ -145,8 +172,30 @@ final class EditorTypographyTests: XCTestCase {
         return try XCTUnwrap(storage.attribute(.font, at: location, effectiveRange: nil) as? NSFont, text)
     }
 
+    private func assertPaintedColor(_ color: NSColor?, matches expected: HighlightColor, _ message: String) {
+        var resolved: NSColor?
+        NSAppearance(named: .aqua)?.performAsCurrentDrawingAppearance {
+            resolved = color?.usingColorSpace(.sRGB)
+        }
+        XCTAssertEqual(resolved?.redComponent ?? -1, CGFloat(expected.light.red) / 255, accuracy: 0.02, message)
+        XCTAssertEqual(resolved?.greenComponent ?? -1, CGFloat(expected.light.green) / 255, accuracy: 0.02, message)
+        XCTAssertEqual(resolved?.blueComponent ?? -1, CGFloat(expected.light.blue) / 255, accuracy: 0.02, message)
+    }
+
+    private var snapshotMarkdown: String {
+        """
+        # Textwork
+
+        Write with *emphasis*, **strong**, and `inline code`.
+
+        ```swift
+        let answer = 42
+        ```
+        """
+    }
+
     private func writeEditorImage(to url: URL) throws {
-        let text = MarkdownDocument.markdownGuide
+        let text = snapshotMarkdown
         let width: CGFloat = 560
         let textView = NSTextView(usingTextLayoutManager: true)
         textView.frame = NSRect(x: 0, y: 0, width: width, height: 1400)
@@ -180,6 +229,7 @@ final class EditorTypographyTests: XCTestCase {
         )
         window.appearance = NSAppearance(named: .aqua)
         window.isReleasedWhenClosed = false
+        textView.appearance = window.appearance
         window.contentView = textView
         window.orderFrontRegardless()
         textView.layoutSubtreeIfNeeded()
@@ -197,9 +247,9 @@ final class EditorTypographyTests: XCTestCase {
         try data.write(to: url)
     }
 
-    private func writePreviewImage(to url: URL) async throws {
-        let size = NSSize(width: 820, height: 1040)
-        let preview = PreviewCard(markdown: MarkdownDocument.markdownGuide)
+    private func writePreviewImage(to url: URL, appearance: NSAppearance.Name) async throws {
+        let size = NSSize(width: 780, height: 240)
+        let preview = PreviewCard(markdown: snapshotMarkdown)
             .frame(width: size.width, height: size.height)
         let hostingView = NSHostingView(rootView: preview)
         hostingView.sizingOptions = []
@@ -210,7 +260,7 @@ final class EditorTypographyTests: XCTestCase {
             backing: .buffered,
             defer: false
         )
-        window.appearance = NSAppearance(named: .aqua)
+        window.appearance = NSAppearance(named: appearance)
         window.isReleasedWhenClosed = false
         hostingView.appearance = window.appearance
         window.contentView = hostingView
