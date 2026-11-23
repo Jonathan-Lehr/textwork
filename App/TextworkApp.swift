@@ -6,5 +6,10 @@ struct TextworkApp: App {
         DocumentGroup(newDocument: MarkdownDocument()) { file in
             EditorScreen(document: file.$document, fileURL: file.fileURL)
         }
+        #if os(macOS)
+        .commands {
+            MarkdownGuideCommands()
+        }
+        #endif
     }
 }

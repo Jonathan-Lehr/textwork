@@ -2,6 +2,8 @@ name: macOS
 
 on:
   push:
+    branches:
+      - main
   pull_request:
 
 concurrency:
@@ -10,12 +12,17 @@ concurrency:
 
 jobs:
   build-test:
-    runs-on: macos-26
+    # Fork pull requests must not run on the self-hosted Mac.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ${{ fromJSON(vars.MACOS_RUNNER || '"macos-latest"') }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_26.6.app
+      - name: Use the installed Xcode
+        run: |
+          if [ -d /Applications/Xcode.app/Contents/Developer ]; then
+            echo "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer" >> "$GITHUB_ENV"
+          fi
 
       - name: Record toolchain
         run: |
@@ -24,7 +31,7 @@ jobs:
           xcodebuild -version | tee -a swift-version.txt
 
       - name: Test editor package
-        run: swift test --package-path Packages/TextworkEditor
+        run: swift test --package-path Packages/TextworkEditor -Xswiftc -warnings-as-errors
 
       - name: Benchmark highlighting
         run: swift run -c release --package-path Packages/TextworkEditor TextworkEditorBench | tee benchmark-results.json
@@ -38,6 +45,8 @@ jobs:
             swift-version.txt
 
       - name: Build macOS app
+        # Xcode passes -suppress-warnings to the local package. That flag
+        # conflicts with warnings-as-errors, so suppression stays off in CI.
         run: |
           xcodebuild \
             -project Textwork.xcodeproj \
@@ -45,4 +54,19 @@ jobs:
             -destination 'platform=macOS' \
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO \
+            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
+            GCC_TREAT_WARNINGS_AS_ERRORS=YES \
+            SWIFT_SUPPRESS_WARNINGS=NO \
             build
+
+      - name: Test macOS app
+        run: |
+          xcodebuild test \
+            -project Textwork.xcodeproj \
+            -scheme Textwork \
+            -destination 'platform=macOS' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
+            GCC_TREAT_WARNINGS_AS_ERRORS=YES \
+            SWIFT_SUPPRESS_WARNINGS=NO

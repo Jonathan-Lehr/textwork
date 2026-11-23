@@ -6,7 +6,7 @@ struct MarkdownDocument: FileDocument {
 
     var text: String
 
-    init(text: String = MarkdownDocument.welcome) {
+    init(text: String = "") {
         self.text = text
     }
 
@@ -25,7 +25,8 @@ struct MarkdownDocument: FileDocument {
         return FileWrapper(regularFileWithContents: data)
     }
 
-    static let welcome = """
+    /// Sample opened from the Help menu. New documents stay empty.
+    static let markdownGuide = """
     # Textwork
 
     A plain-text Markdown editor. The card on the side is a read-only preview.
