@@ -103,8 +103,9 @@ public struct HighlightRunStyle: Equatable, Sendable {
 /// the same attributes follow the system appearance.
 public struct HighlightTheme: Equatable, Sendable {
     public var body: HighlightColor
-    /// Very light gray behind inline code. Light and dark are separate so the
-    /// chip stays subtle on both appearances.
+    /// Gray behind inline code, halfway from the previous chip toward the page.
+    /// Light is `#F9F9FA` (halfway from `#F3F3F5` to white). Dark is `#242426`
+    /// (halfway from `#2A2A2E` to the `#1E1E1E` editor background).
     public var inlineCodeBackground: HighlightColor
     public var roles: [HighlightRole: HighlightRoleColors]
 
@@ -121,7 +122,7 @@ public struct HighlightTheme: Equatable, Sendable {
 
     public static let standard: HighlightTheme = {
         let body = highlightColor(light: (0x1D, 0x1D, 0x1F), dark: (0xF5, 0xF5, 0xF7))
-        let inlineCodeBackground = highlightColor(light: (0xF3, 0xF3, 0xF5), dark: (0x2A, 0x2A, 0x2E))
+        let inlineCodeBackground = highlightColor(light: (0xF9, 0xF9, 0xFA), dark: (0x24, 0x24, 0x26))
         let marker = highlightColor(light: (0x6E, 0x6E, 0x73), dark: (0x98, 0x98, 0x9D))
         let headingSyntax = highlightColor(light: (0x5D, 0x72, 0xB0), dark: (0x77, 0x86, 0xBD))
         let heading = HighlightRoleColors(content: body, syntax: headingSyntax)

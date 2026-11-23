@@ -37,7 +37,7 @@ public struct MarkdownHTMLRenderer: Sendable {
     /// 14px by 16px of padding, in light and dark. Emphasis and strong inherit
     /// the body color. Heading sizes stay as they are. The article max width
     /// is 78.2ch, 15% wider than 68ch. Fenced code is 1pt larger than 12.9px
-    /// (0.86rem at the 15px root) and its line height is 2pt tighter than
+    /// (0.86rem at the 15px root) and its line height is 3pt tighter than
     /// 18.705px (1.45 times that font size).
     public static let stylesheet: String = {
         let theme = HighlightTheme.standard
@@ -103,7 +103,7 @@ public struct MarkdownHTMLRenderer: Sendable {
           padding: 0;
           border-radius: 0;
           font-size: calc(12.9px + 1pt);
-          line-height: calc(18.705px - 2pt);
+          line-height: calc(18.705px - 3pt);
         }
         .code-keyword { color: var(--code-keyword); }
         .code-string { color: var(--code-string); }
