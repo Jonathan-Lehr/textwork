@@ -241,7 +241,9 @@ private func mergeRanges(_ ranges: [Range<Int>]) -> [Range<Int>] {
 
 private func spanPrecedes(_ lhs: HighlightSpan, _ rhs: HighlightSpan) -> Bool {
     if lhs.startUTF16 != rhs.startUTF16 { return lhs.startUTF16 < rhs.startUTF16 }
-    if lhs.endUTF16 != rhs.endUTF16 { return lhs.endUTF16 < rhs.endUTF16 }
+    // A wider span is painted first so a token that starts on the same character
+    // can replace its foreground color.
+    if lhs.endUTF16 != rhs.endUTF16 { return lhs.endUTF16 > rhs.endUTF16 }
     if lhs.isSyntax != rhs.isSyntax { return lhs.isSyntax && !rhs.isSyntax }
     return lhs.role.rawValue < rhs.role.rawValue
 }

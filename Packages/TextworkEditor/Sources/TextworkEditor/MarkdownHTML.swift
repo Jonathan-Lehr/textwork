@@ -95,6 +95,13 @@ public struct MarkdownHTMLRenderer: Sendable {
           margin: 0 0 0.9em;
         }
         pre code { background: none; padding: 0; font-size: 0.86rem; line-height: 1.45; }
+        .code-keyword { color: var(--code-keyword); }
+        .code-string { color: var(--code-string); }
+        .code-number { color: var(--code-number); }
+        .code-comment { color: var(--code-comment); }
+        .code-type { color: var(--code-type); }
+        .code-tag { color: var(--code-tag); }
+        .code-attribute { color: var(--code-attribute); }
         blockquote {
           margin: 0 0 0.9em;
           padding: 0.1em 0 0.1em 1em;
@@ -195,10 +202,11 @@ public struct MarkdownHTMLRenderer: Sendable {
             let inner = emitInlines(inlines)
             return unwrapParagraphs ? inner : "<p>\(inner)</p>"
         case .codeBlock(let language, let text):
+            let colored = FencedCodeTokenizer.html(for: text, languageName: language)
             if let language {
-                return "<pre><code class=\"language-\(escapeAttribute(language))\">\(escapeRaw(text))</code></pre>"
+                return "<pre><code class=\"language-\(escapeAttribute(language))\">\(colored)</code></pre>"
             }
-            return "<pre><code>\(escapeRaw(text))</code></pre>"
+            return "<pre><code>\(colored)</code></pre>"
         case .blockQuote(let children):
             let inner = emitBlocks(children, unwrapParagraphs: false)
             return "<blockquote>\n\(inner)\n</blockquote>"

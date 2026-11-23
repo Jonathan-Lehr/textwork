@@ -146,7 +146,7 @@ final class MarkdownHTMLTests: XCTestCase {
         )
         XCTAssertEqual(
             body("```swift\nlet answer = 42\n```"),
-            "<pre><code class=\"language-swift\">let answer = 42\n</code></pre>"
+            "<pre><code class=\"language-swift\"><span class=\"code-keyword\">let</span> answer = <span class=\"code-number\">42</span>\n</code></pre>"
         )
         XCTAssertEqual(body("```\n*not emphasis*\n```"), "<pre><code>*not emphasis*\n</code></pre>")
         XCTAssertEqual(body("~~~\ncode\n~~~"), "<pre><code>code\n</code></pre>")
@@ -180,7 +180,7 @@ final class MarkdownHTMLTests: XCTestCase {
             </tbody>
             </table>
             """,
-            "<pre><code class=\"language-swift\">let answer = 42\n</code></pre>",
+            "<pre><code class=\"language-swift\"><span class=\"code-keyword\">let</span> answer = <span class=\"code-number\">42</span>\n</code></pre>",
         ].joined(separator: "\n")
         XCTAssertEqual(body(welcomeSample), expected)
     }

@@ -94,8 +94,10 @@ public struct HighlightRunStyle: Equatable, Sendable {
 /// readable and sit behind the words. Heading, emphasis, and strong words use
 /// the body color. Size, weight, italic, and bold carry the meaning. Heading
 /// markers stay a quieter indigo, and emphasis and strong markers are a
-/// quieter gray. Reference links use the link role. Fenced code uses one color
-/// for every language. Inline code sits on ``inlineCodeBackground``.
+/// quieter gray. Reference links use the link role. Unknown fenced languages
+/// keep the code color. Swift, JSON, shell, and HTML fences add keyword,
+/// string, number, comment, type, tag, and attribute colors. Inline code sits
+/// on ``inlineCodeBackground``.
 ///
 /// The text views turn these into dynamic `NSColor` and `UIColor` values, so
 /// the same attributes follow the system appearance.
@@ -173,6 +175,48 @@ public struct HighlightTheme: Equatable, Sendable {
             syntaxLight: (0x33, 0x82, 0x53),
             syntaxDark: (0x62, 0x93, 0x6E)
         )
+        let codeKeyword = roleColors(
+            contentLight: (0x1A, 0x4F, 0xC4),
+            contentDark: (0x8E, 0xB4, 0xFF),
+            syntaxLight: (0x46, 0x70, 0xCF),
+            syntaxDark: (0x6E, 0x88, 0xBE)
+        )
+        let codeString = roleColors(
+            contentLight: (0x14, 0x62, 0x28),
+            contentDark: (0x86, 0xD9, 0x96),
+            syntaxLight: (0x43, 0x81, 0x53),
+            syntaxDark: (0x60, 0x94, 0x6A)
+        )
+        let codeNumber = roleColors(
+            contentLight: (0x8A, 0x4E, 0x00),
+            contentDark: (0xF0, 0xB4, 0x5C),
+            syntaxLight: (0x9C, 0x69, 0x26),
+            syntaxDark: (0xA9, 0x81, 0x47)
+        )
+        let codeComment = roleColors(
+            contentLight: (0x5A, 0x5A, 0x60),
+            contentDark: (0xA3, 0xA3, 0xA8),
+            syntaxLight: (0x73, 0x73, 0x78),
+            syntaxDark: (0x88, 0x88, 0x8C)
+        )
+        let codeType = roleColors(
+            contentLight: (0x0E, 0x6F, 0x86),
+            contentDark: (0x79, 0xD0, 0xE4),
+            syntaxLight: (0x26, 0x7D, 0x92),
+            syntaxDark: (0x58, 0x90, 0x9D)
+        )
+        let codeTag = roleColors(
+            contentLight: (0x7A, 0x2F, 0x8A),
+            contentDark: (0xE0, 0xA0, 0xEC),
+            syntaxLight: (0x97, 0x5D, 0xA4),
+            syntaxDark: (0xA6, 0x79, 0xAE)
+        )
+        let codeAttribute = roleColors(
+            contentLight: (0x9A, 0x4E, 0x12),
+            contentDark: (0xF0, 0xB0, 0x7A),
+            syntaxLight: (0xA6, 0x63, 0x2E),
+            syntaxDark: (0xAB, 0x80, 0x5C)
+        )
         let roles: [HighlightRole: HighlightRoleColors] = [
             .heading1: heading,
             .heading2: heading,
@@ -184,6 +228,13 @@ public struct HighlightTheme: Equatable, Sendable {
             .strong: strong,
             .codeSpan: code,
             .codeBlock: code,
+            .codeKeyword: codeKeyword,
+            .codeString: codeString,
+            .codeNumber: codeNumber,
+            .codeComment: codeComment,
+            .codeType: codeType,
+            .codeTag: codeTag,
+            .codeAttribute: codeAttribute,
             .link: link,
             .image: image,
             .listMarker: list,
@@ -243,7 +294,7 @@ public struct HighlightTheme: Equatable, Sendable {
                 fontTreatment: .monospaced,
                 underline: false
             )
-        case .codeBlock, .html:
+        case .codeBlock, .html, .codeKeyword, .codeString, .codeNumber, .codeComment, .codeType, .codeTag, .codeAttribute:
             return HighlightRunStyle(foreground: foreground, background: nil, fontTreatment: .monospaced, underline: false)
         case .link, .image:
             return HighlightRunStyle(foreground: foreground, background: nil, fontTreatment: .body, underline: true)
@@ -261,6 +312,13 @@ public struct HighlightTheme: Equatable, Sendable {
             ("--text", body),
             ("--code", color(for: .codeSpan, isSyntax: false)),
             ("--code-fill", inlineCodeBackground),
+            ("--code-keyword", color(for: .codeKeyword, isSyntax: false)),
+            ("--code-string", color(for: .codeString, isSyntax: false)),
+            ("--code-number", color(for: .codeNumber, isSyntax: false)),
+            ("--code-comment", color(for: .codeComment, isSyntax: false)),
+            ("--code-type", color(for: .codeType, isSyntax: false)),
+            ("--code-tag", color(for: .codeTag, isSyntax: false)),
+            ("--code-attribute", color(for: .codeAttribute, isSyntax: false)),
             ("--link", color(for: .link, isSyntax: false)),
             ("--quote", color(for: .blockQuote, isSyntax: false)),
             ("--quote-marker", color(for: .blockQuote, isSyntax: true)),
