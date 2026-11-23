@@ -4,8 +4,8 @@ import WebKit
 import XCTest
 
 @MainActor
-final class PreviewGlassFrameTests: XCTestCase {
-    private let cardSize = NSSize(width: 520, height: 700)
+final class PreviewPaneTests: XCTestCase {
+    private let paneSize = NSSize(width: 520, height: 700)
 
     override func setUp() async throws {
         try await super.setUp()
@@ -18,23 +18,7 @@ final class PreviewGlassFrameTests: XCTestCase {
         }
     }
 
-    func testGlassFrameLeavesTheMiddleOfTheCardOpen() {
-        let shape = RoundedRectangleFrame(
-            cornerRadius: PreviewCardLayout.cornerRadius,
-            thickness: PreviewCardLayout.glassFrameThickness
-        )
-        let rect = CGRect(x: 0, y: 0, width: 400, height: 600)
-        let path = shape.path(in: rect)
-        let midX = rect.midX
-        let midY = rect.midY
-        XCTAssertTrue(path.contains(CGPoint(x: 4, y: midY)))
-        XCTAssertTrue(path.contains(CGPoint(x: midX, y: 4)))
-        XCTAssertFalse(path.contains(CGPoint(x: midX, y: midY)))
-        XCTAssertFalse(path.contains(CGPoint(x: 24, y: midY)))
-        XCTAssertFalse(path.contains(CGPoint(x: midX, y: 24)))
-    }
-
-    func testGlassFrameDoesNotReceiveHitsAndThePageKeepsContrast() async throws {
+    func testPreviewFillsThePaneAndKeepsContrast() async throws {
         let light = try await showPreview(appearance: .aqua)
         defer { light.close() }
         try await assertWebViewReceivesHits(in: light.hostingView)
@@ -49,13 +33,13 @@ final class PreviewGlassFrameTests: XCTestCase {
     }
 
     private func showPreview(appearance: NSAppearance.Name) async throws -> PreviewHarness {
-        let card = PreviewCard(markdown: sampleMarkdown)
-            .frame(width: cardSize.width, height: cardSize.height)
-        let hostingView = NSHostingView(rootView: card)
+        let preview = PreviewCard(markdown: sampleMarkdown)
+            .frame(width: paneSize.width, height: paneSize.height)
+        let hostingView = NSHostingView(rootView: preview)
         hostingView.sizingOptions = []
-        hostingView.frame = NSRect(origin: .zero, size: cardSize)
+        hostingView.frame = NSRect(origin: .zero, size: paneSize)
         let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: cardSize),
+            contentRect: NSRect(origin: .zero, size: paneSize),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -73,10 +57,9 @@ final class PreviewGlassFrameTests: XCTestCase {
     private func assertWebViewReceivesHits(in hostingView: NSView) async throws {
         let webView = try await waitForWebView(in: hostingView)
         let center = CGPoint(x: hostingView.bounds.midX, y: hostingView.bounds.midY)
-        let rimX = PreviewCardLayout.outerPadding + (PreviewCardLayout.glassFrameThickness / 2)
-        let rim = CGPoint(x: rimX, y: hostingView.bounds.midY)
+        let edge = CGPoint(x: 4, y: hostingView.bounds.midY)
         XCTAssertTrue(view(hostingView.hitTest(center), isInside: webView))
-        XCTAssertTrue(view(hostingView.hitTest(rim), isInside: webView))
+        XCTAssertTrue(view(hostingView.hitTest(edge), isInside: webView))
     }
 
     private func waitForWebView(in root: NSView) async throws -> WKWebView {
@@ -88,7 +71,7 @@ final class PreviewGlassFrameTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(50))
         }
         XCTFail("The preview web view did not finish loading.")
-        throw PreviewGlassFrameTestError.webViewDidNotLoad
+        throw PreviewPaneTestError.webViewDidNotLoad
     }
 
     private func findWebView(in view: NSView) -> WKWebView? {
@@ -183,6 +166,6 @@ private final class PreviewHarness {
     }
 }
 
-private enum PreviewGlassFrameTestError: Error {
+private enum PreviewPaneTestError: Error {
     case webViewDidNotLoad
 }

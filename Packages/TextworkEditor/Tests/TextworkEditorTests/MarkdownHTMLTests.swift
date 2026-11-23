@@ -199,23 +199,8 @@ final class MarkdownHTMLTests: XCTestCase {
         XCTAssertFalse(document.contains("<script"))
         XCTAssertTrue(document.contains("&lt;script&gt;"))
         XCTAssertTrue(document.contains(MarkdownHTMLRenderer.stylesheet))
-    }
-
-    func testEditorBackgroundSurfaceReplacesThePageWash() {
-        let editorBackground = renderer.document(
-            wrapping: "<p>Hi</p>",
-            title: "Preview",
-            surface: .editorBackground
-        )
-        let light = HighlightTheme.lightEditorBackground.cssHex
-        let dark = HighlightTheme.darkEditorBackground.cssHex
-        XCTAssertTrue(editorBackground.contains("html, body { background: \(light); }"))
-        XCTAssertTrue(editorBackground.contains("html, body { background: \(dark); }"))
-        XCTAssertTrue(editorBackground.contains("prefers-color-scheme: dark"))
-
-        let wash = renderer.document(wrapping: "<p>Hi</p>", title: "Preview")
-        XCTAssertFalse(wash.contains("html, body { background: \(light); }"))
-        XCTAssertTrue(wash.contains("--page: rgba(0, 0, 0, 0.05);"))
+        XCTAssertTrue(document.contains("background: canvas"))
+        XCTAssertFalse(document.contains("--page:"))
     }
 
     func testPreviewPathsStayInsideTheDocumentDirectory() {

@@ -83,16 +83,13 @@ final class MarkdownPreviewCoordinator: NSObject, WKNavigationDelegate {
         webView.allowsBackForwardNavigationGestures = false
         #if os(macOS)
         webView.allowsMagnification = false
-        webView.underPageBackgroundColor = PreviewSurface.underPageBackgroundColor
+        webView.underPageBackgroundColor = .textBackgroundColor
         webView.setAccessibilityLabel("Markdown preview")
         #else
-        let pageColor = PreviewSurface.underPageBackgroundColor
-        webView.isOpaque = PreviewSurface.usesGlassFrame
-        webView.backgroundColor = pageColor
-        webView.scrollView.backgroundColor = pageColor
-        if PreviewSurface.usesGlassFrame {
-            webView.underPageBackgroundColor = pageColor
-        }
+        webView.isOpaque = false
+        webView.backgroundColor = .systemBackground
+        webView.scrollView.backgroundColor = .systemBackground
+        webView.underPageBackgroundColor = .systemBackground
         webView.accessibilityLabel = "Markdown preview"
         #endif
         #if DEBUG
@@ -119,9 +116,7 @@ final class MarkdownPreviewCoordinator: NSObject, WKNavigationDelegate {
         shellReady = false
         pendingBody = bodyHTML
         loadedBody = bodyHTML
-        handler.setDocumentHTML(
-            renderer.document(wrapping: bodyHTML, title: "Preview", surface: PreviewSurface.pageSurface)
-        )
+        handler.setDocumentHTML(renderer.document(wrapping: bodyHTML, title: "Preview"))
         webView.load(URLRequest(url: PreviewResourceHandler.pageURL))
     }
 

@@ -10,16 +10,6 @@ public enum MarkdownImageAddressing: Sendable, Equatable {
     case preview
 }
 
-/// Page fill for a rendered document.
-///
-/// Exported HTML keeps the translucent wash from the stylesheet. The preview
-/// can ask for the editor background instead, so the words sit on the surface
-/// the highlight palette was tuned against.
-public enum MarkdownPageSurface: Sendable, Equatable {
-    case translucentWash
-    case editorBackground
-}
-
 /// Renders Markdown to HTML for the preview and for HTML export.
 ///
 /// One pipeline covers both. The grammar is CommonMark plus GitHub-flavored
@@ -53,21 +43,19 @@ public struct MarkdownHTMLRenderer: Sendable {
         \(theme.previewCustomProperties(forDarkAppearance: false))
           --table-fill: rgba(0, 0, 0, 0.06);
           --line: rgba(0, 0, 0, 0.14);
-          --page: rgba(0, 0, 0, 0.05);
         }
         @media (prefers-color-scheme: dark) {
           :root {
         \(theme.previewCustomProperties(forDarkAppearance: true))
             --table-fill: rgba(255, 255, 255, 0.08);
             --line: rgba(255, 255, 255, 0.16);
-            --page: rgba(255, 255, 255, 0.06);
           }
         }
         * { box-sizing: border-box; }
         html, body {
           margin: 0;
           min-height: 100%;
-          background: var(--page);
+          background: canvas;
           color: var(--text);
           font: 15px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
         }
@@ -152,11 +140,7 @@ public struct MarkdownHTMLRenderer: Sendable {
     }
 
     /// Wraps an already rendered body. The preview uses this for the shell page.
-    public func document(
-        wrapping body: String,
-        title: String = "",
-        surface: MarkdownPageSurface = .translucentWash
-    ) -> String {
+    public func document(wrapping body: String, title: String = "") -> String {
         let safeTitle = escapeText(title.isEmpty ? "Textwork" : title)
         return """
         <!DOCTYPE html>
@@ -169,7 +153,6 @@ public struct MarkdownHTMLRenderer: Sendable {
         <title>\(safeTitle)</title>
         <style>
         \(Self.stylesheet)
-        \(surfaceOverrideStyle(surface))
         </style>
         </head>
         <body>
@@ -179,24 +162,6 @@ public struct MarkdownHTMLRenderer: Sendable {
         </body>
         </html>
         """
-    }
-
-    /// Later rules in the same style element replace the wash. An empty string
-    /// leaves the stylesheet's `--page` color in place.
-    private func surfaceOverrideStyle(_ surface: MarkdownPageSurface) -> String {
-        switch surface {
-        case .translucentWash:
-            return ""
-        case .editorBackground:
-            let light = HighlightTheme.lightEditorBackground.cssHex
-            let dark = HighlightTheme.darkEditorBackground.cssHex
-            return """
-            html, body { background: \(light); }
-            @media (prefers-color-scheme: dark) {
-              html, body { background: \(dark); }
-            }
-            """
-        }
     }
 
     /// Resolves a preview image or link path and refuses anything outside `directory`.

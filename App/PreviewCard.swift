@@ -3,10 +3,7 @@ import TextworkEditor
 
 /// Read-only rendered Markdown. This view is not a text editor.
 ///
-/// On macOS 26 and iOS 26 a Liquid Glass frame replaces the gray wash. The
-/// frame does not receive hits, so the page still scrolls, selects, and opens
-/// links. The words stay on the editor background the palette was tuned
-/// against. A glass sheet over the article would blur them.
+/// The preview fills its pane. It has no card fill, border, or inset.
 struct PreviewCard: View {
     var markdown: String
     var resourceDirectory: URL?
@@ -25,12 +22,6 @@ struct PreviewCard: View {
     var body: some View {
         MarkdownPreviewWebView(bodyHTML: renderedBody, resourceDirectory: resourceDirectory)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(PreviewSurface.cardBackground)
-            .clipShape(PreviewCardLayout.card)
-            .overlay {
-                PreviewGlassFrame()
-            }
-            .padding(PreviewCardLayout.outerPadding)
             .accessibilityLabel("Markdown preview")
             .onChange(of: markdown) { _, newValue in
                 scheduleRender(of: newValue)
