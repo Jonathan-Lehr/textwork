@@ -6,6 +6,8 @@ import XCTest
 
 @MainActor
 final class EditorTypographyTests: XCTestCase {
+    private var previewWindows: [NSWindow] = []
+
     func testStandardUsesMenloAtTheDefaultSize() {
         let configuration = EditorConfiguration.standard
         XCTAssertEqual(configuration.typography.fontName, EditorTypography.menloFontName)
@@ -142,6 +144,24 @@ final class EditorTypographyTests: XCTestCase {
         XCTAssertEqual(textView.defaultParagraphStyle?.lineSpacing, 2)
     }
 
+    func testPreviewCodeLineHeightIsTheDeclaredLength() async throws {
+        let application = NSApplication.shared
+        if application.activationPolicy() != .accessory {
+            application.setActivationPolicy(.accessory)
+        }
+        if !application.isRunning {
+            application.finishLaunching()
+        }
+        let metrics = try await previewCodeMetrics(appearance: .aqua)
+        defer { closePreviewWindows() }
+        let codeLineHeight = try XCTUnwrap(metrics["codeLineHeight"] as? Double)
+        let preLineHeight = try XCTUnwrap(metrics["preLineHeight"] as? Double)
+        let pitch = try XCTUnwrap(metrics["linePitch"] as? Double)
+        XCTAssertEqual(codeLineHeight, 13.372, accuracy: 0.2, "pre code computed line-height")
+        XCTAssertEqual(preLineHeight, 13.372, accuracy: 0.2, "pre computed line-height")
+        XCTAssertEqual(pitch, 13.372, accuracy: 0.75, "baseline pitch \(metrics)")
+    }
+
     func testWriteTypographySnapshotsWhenRequested() async throws {
         guard let directory = ProcessInfo.processInfo.environment["TEXTWORK_TYPOGRAPHY_SNAPSHOTS"] else { return }
         let application = NSApplication.shared
@@ -247,9 +267,115 @@ final class EditorTypographyTests: XCTestCase {
         try data.write(to: url)
     }
 
+    private var codeBlockMarkdown: String {
+        """
+        # Textwork
+
+        Write with *emphasis*, **strong**, and `inline code`.
+
+        ```swift
+        let first = 1
+        let second = 2
+        let third = 3
+        ```
+        """
+    }
+
+    private func previewCodeMetrics(appearance: NSAppearance.Name) async throws -> [String: Any] {
+        let webView = try await loadPreview(markdown: codeBlockMarkdown, appearance: appearance, size: NSSize(width: 780, height: 420))
+        let script = """
+        const pre = document.querySelector('pre');
+        const code = pre.querySelector('code');
+        const span = code.querySelector('span');
+        function metrics(element) {
+          const style = getComputedStyle(element);
+          return {
+            display: style.display,
+            fontSize: style.fontSize,
+            lineHeight: style.lineHeight,
+            paddingTop: style.paddingTop,
+            paddingBottom: style.paddingBottom
+          };
+        }
+        const range = document.createRange();
+        range.selectNodeContents(code);
+        const rects = Array.from(range.getClientRects()).map(rect => rect.top);
+        const pitches = [];
+        for (let index = 1; index < rects.length; index += 1) {
+          const gap = rects[index] - rects[index - 1];
+          if (gap > 1) pitches.push(gap);
+        }
+        const pitch = pitches.length ? pitches.reduce((sum, value) => sum + value, 0) / pitches.length : 0;
+        return {
+          pre: metrics(pre),
+          code: metrics(code),
+          span: metrics(span),
+          pitches: pitches,
+          pitch: pitch
+        };
+        """
+        let value = try await webView.callAsyncJavaScript(script, arguments: [:], in: nil, contentWorld: .page)
+        let payload = try XCTUnwrap(value as? [String: Any])
+        let pre = try XCTUnwrap(payload["pre"] as? [String: Any])
+        let code = try XCTUnwrap(payload["code"] as? [String: Any])
+        let span = try XCTUnwrap(payload["span"] as? [String: Any])
+        return [
+            "preLineHeight": points(pre["lineHeight"]),
+            "preFontSize": points(pre["fontSize"]),
+            "preDisplay": pre["display"] ?? "",
+            "codeLineHeight": points(code["lineHeight"]),
+            "codeFontSize": points(code["fontSize"]),
+            "codeDisplay": code["display"] ?? "",
+            "spanLineHeight": points(span["lineHeight"]),
+            "spanFontSize": points(span["fontSize"]),
+            "linePitch": payload["pitch"] as? Double ?? 0,
+            "pitches": payload["pitches"] ?? [],
+        ]
+    }
+
+    private func points(_ value: Any?) -> Double {
+        guard let text = value as? String else { return -1 }
+        return Double(text.replacingOccurrences(of: "px", with: "")) ?? -1
+    }
+
+    private func loadPreview(
+        markdown: String,
+        appearance: NSAppearance.Name,
+        size: NSSize
+    ) async throws -> WKWebView {
+        let preview = PreviewCard(markdown: markdown)
+            .frame(width: size.width, height: size.height)
+        let hostingView = NSHostingView(rootView: preview)
+        hostingView.sizingOptions = []
+        hostingView.frame = NSRect(origin: .zero, size: size)
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.appearance = NSAppearance(named: appearance)
+        window.isReleasedWhenClosed = false
+        hostingView.appearance = window.appearance
+        window.contentView = hostingView
+        window.orderFrontRegardless()
+        hostingView.layoutSubtreeIfNeeded()
+        window.displayIfNeeded()
+        previewWindows.append(window)
+        return try await waitForWebView(in: hostingView)
+    }
+
+    private func closePreviewWindows() {
+        for window in previewWindows {
+            window.orderOut(nil)
+            window.close()
+        }
+        previewWindows.removeAll()
+    }
+
     private func writePreviewImage(to url: URL, appearance: NSAppearance.Name) async throws {
-        let size = NSSize(width: 780, height: 240)
-        let preview = PreviewCard(markdown: snapshotMarkdown)
+        let size = NSSize(width: 780, height: 420)
+        let preview = PreviewCard(markdown: codeBlockMarkdown)
             .frame(width: size.width, height: size.height)
         let hostingView = NSHostingView(rootView: preview)
         hostingView.sizingOptions = []
