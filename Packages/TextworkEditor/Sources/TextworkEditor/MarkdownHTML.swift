@@ -33,8 +33,10 @@ public struct MarkdownHTMLRenderer: Sendable {
     /// Role colors come from ``HighlightTheme/standard``. Light values sit on
     /// `:root`. Dark values replace them under `prefers-color-scheme: dark`.
     /// Inline code keeps a light gray chip. Fenced and indented code do not.
-    /// Emphasis and strong inherit the body color. Margins and the type scale
-    /// stay as they are.
+    /// Emphasis and strong inherit the body color. Heading sizes stay as they
+    /// are. The article max width is 78.2ch, 15% wider than 68ch. Fenced code
+    /// is 1pt larger than 12.9px (0.86rem at the 15px root) and its line height
+    /// is 1pt tighter than 18.705px (1.45 times that font size).
     public static let stylesheet: String = {
         let theme = HighlightTheme.standard
         return """
@@ -61,7 +63,7 @@ public struct MarkdownHTMLRenderer: Sendable {
         }
         article {
           box-sizing: border-box;
-          width: min(68ch, 100%);
+          width: min(78.2ch, 100%);
           margin-inline: auto;
           padding: 28px 32px 48px;
         }
@@ -92,7 +94,7 @@ public struct MarkdownHTMLRenderer: Sendable {
           overflow: auto;
           margin: 0 0 0.9em;
         }
-        pre code { background: none; padding: 0; font-size: 0.86rem; line-height: 1.45; }
+        pre code { background: none; padding: 0; font-size: calc(12.9px + 1pt); line-height: calc(18.705px - 1pt); }
         .code-keyword { color: var(--code-keyword); }
         .code-string { color: var(--code-string); }
         .code-number { color: var(--code-number); }

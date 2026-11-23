@@ -209,7 +209,10 @@ final class HighlightThemeTests: XCTestCase {
             XCTFail("Missing pre rule")
         }
         XCTAssertTrue(stylesheet.contains("padding: 0.12em 0.35em"))
-        XCTAssertTrue(stylesheet.contains("width: min(68ch, 100%)"))
+        XCTAssertTrue(stylesheet.contains("width: min(78.2ch, 100%)"))
+        XCTAssertTrue(stylesheet.contains("font: 15px/1.55 -apple-system"))
+        XCTAssertTrue(stylesheet.contains("font-size: calc(12.9px + 1pt)"))
+        XCTAssertTrue(stylesheet.contains("line-height: calc(18.705px - 1pt)"))
         XCTAssertTrue(stylesheet.contains("h1 { font-size: 2rem;"))
         XCTAssertFalse(stylesheet.contains("language-"))
         XCTAssertTrue(stylesheet.contains("color-scheme: light dark"))
