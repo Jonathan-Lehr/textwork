@@ -70,7 +70,6 @@ public struct MarkdownHTMLRenderer: Sendable {
         h1, h2, h3, h4, h5, h6 {
           line-height: 1.25;
           letter-spacing: -0.02em;
-          color: var(--heading);
         }
         h1 { font-size: 2rem; font-weight: 700; margin: 0 0 0.45em; }
         h2 { font-size: 1.55rem; font-weight: 600; margin: 1.15em 0 0.4em; }

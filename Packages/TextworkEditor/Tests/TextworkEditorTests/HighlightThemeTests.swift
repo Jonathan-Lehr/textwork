@@ -10,12 +10,12 @@ final class HighlightThemeTests: XCTestCase {
 
     func testRoleToColorMapping() {
         let expected: [HighlightRole: ExpectedColors] = [
-            .heading1: ExpectedColors("#244094", "#9CB2FF", "#5D72B0", "#7786BD"),
-            .heading2: ExpectedColors("#244094", "#9CB2FF", "#5D72B0", "#7786BD"),
-            .heading3: ExpectedColors("#244094", "#9CB2FF", "#5D72B0", "#7786BD"),
-            .heading4: ExpectedColors("#244094", "#9CB2FF", "#5D72B0", "#7786BD"),
-            .heading5: ExpectedColors("#244094", "#9CB2FF", "#5D72B0", "#7786BD"),
-            .heading6: ExpectedColors("#244094", "#9CB2FF", "#5D72B0", "#7786BD"),
+            .heading1: ExpectedColors("#1D1D1F", "#F5F5F7", "#5D72B0", "#7786BD"),
+            .heading2: ExpectedColors("#1D1D1F", "#F5F5F7", "#5D72B0", "#7786BD"),
+            .heading3: ExpectedColors("#1D1D1F", "#F5F5F7", "#5D72B0", "#7786BD"),
+            .heading4: ExpectedColors("#1D1D1F", "#F5F5F7", "#5D72B0", "#7786BD"),
+            .heading5: ExpectedColors("#1D1D1F", "#F5F5F7", "#5D72B0", "#7786BD"),
+            .heading6: ExpectedColors("#1D1D1F", "#F5F5F7", "#5D72B0", "#7786BD"),
             .emphasis: ExpectedColors("#1D1D1F", "#F5F5F7", "#6E6E73", "#98989D"),
             .strong: ExpectedColors("#1D1D1F", "#F5F5F7", "#6E6E73", "#98989D"),
             .codeSpan: ExpectedColors("#A8284A", "#FFA0B8", "#B9516C", "#B67686"),
@@ -84,8 +84,10 @@ final class HighlightThemeTests: XCTestCase {
                 }
             }
         }
+        XCTAssertEqual(theme.color(for: .heading1, isSyntax: false), theme.body)
         XCTAssertEqual(theme.color(for: .emphasis, isSyntax: false), theme.body)
         XCTAssertEqual(theme.color(for: .strong, isSyntax: false), theme.body)
+        XCTAssertEqual(theme.color(for: .heading1, isSyntax: true).light.cssHex, "#5D72B0")
         XCTAssertNotEqual(theme.color(for: .emphasis, isSyntax: true), theme.color(for: .emphasis, isSyntax: false))
         XCTAssertEqual(theme.inlineCodeBackground.light.cssHex, "#F3F3F5")
         XCTAssertEqual(theme.inlineCodeBackground.dark.cssHex, "#2A2A2E")
@@ -186,6 +188,9 @@ final class HighlightThemeTests: XCTestCase {
         XCTAssertTrue(stylesheet.contains(theme.inlineCodeBackground.dark.cssHex))
         XCTAssertFalse(stylesheet.contains("em { color"))
         XCTAssertFalse(stylesheet.contains("strong { color"))
+        XCTAssertFalse(stylesheet.contains("color: var(--heading)"))
+        XCTAssertTrue(stylesheet.contains("h1 { font-size: 2rem;"))
+        XCTAssertTrue(stylesheet.contains("h2 { font-size: 1.55rem;"))
         if let preStart = stylesheet.range(of: "pre {") {
             let afterPre = stylesheet[preStart.upperBound...]
             if let preEnd = afterPre.range(of: "}") {

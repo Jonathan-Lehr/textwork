@@ -91,10 +91,11 @@ public struct HighlightRunStyle: Equatable, Sendable {
 ///
 /// Syntax markers (`isSyntax`) use a quieter tint of the same hue as the
 /// content they mark, so hashes, asterisks, backticks, and brackets stay
-/// readable and sit behind the words. Emphasis and strong words use the body
-/// color; italic and bold carry the meaning, and their markers are a quieter
-/// gray. Reference links use the link role. Fenced code uses one color for
-/// every language. Inline code sits on ``inlineCodeBackground``.
+/// readable and sit behind the words. Heading, emphasis, and strong words use
+/// the body color. Size, weight, italic, and bold carry the meaning. Heading
+/// markers stay a quieter indigo, and emphasis and strong markers are a
+/// quieter gray. Reference links use the link role. Fenced code uses one color
+/// for every language. Inline code sits on ``inlineCodeBackground``.
 ///
 /// The text views turn these into dynamic `NSColor` and `UIColor` values, so
 /// the same attributes follow the system appearance.
@@ -120,12 +121,8 @@ public struct HighlightTheme: Equatable, Sendable {
         let body = highlightColor(light: (0x1D, 0x1D, 0x1F), dark: (0xF5, 0xF5, 0xF7))
         let inlineCodeBackground = highlightColor(light: (0xF3, 0xF3, 0xF5), dark: (0x2A, 0x2A, 0x2E))
         let marker = highlightColor(light: (0x6E, 0x6E, 0x73), dark: (0x98, 0x98, 0x9D))
-        let heading = roleColors(
-            contentLight: (0x24, 0x40, 0x94),
-            contentDark: (0x9C, 0xB2, 0xFF),
-            syntaxLight: (0x5D, 0x72, 0xB0),
-            syntaxDark: (0x77, 0x86, 0xBD)
-        )
+        let headingSyntax = highlightColor(light: (0x5D, 0x72, 0xB0), dark: (0x77, 0x86, 0xBD))
+        let heading = HighlightRoleColors(content: body, syntax: headingSyntax)
         let emphasis = HighlightRoleColors(content: body, syntax: marker)
         let strong = HighlightRoleColors(content: body, syntax: marker)
         let code = roleColors(
@@ -262,7 +259,6 @@ public struct HighlightTheme: Equatable, Sendable {
     func previewCustomProperties(forDarkAppearance dark: Bool) -> String {
         let entries: [(String, HighlightColor)] = [
             ("--text", body),
-            ("--heading", color(for: .heading1, isSyntax: false)),
             ("--code", color(for: .codeSpan, isSyntax: false)),
             ("--code-fill", inlineCodeBackground),
             ("--link", color(for: .link, isSyntax: false)),
