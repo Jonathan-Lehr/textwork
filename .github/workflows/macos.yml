@@ -24,7 +24,7 @@ jobs:
           xcodebuild -version | tee -a swift-version.txt
 
       - name: Test editor package
-        run: swift test --package-path Packages/TextworkEditor
+        run: swift test --package-path Packages/TextworkEditor -Xswiftc -warnings-as-errors
 
       - name: Benchmark highlighting
         run: swift run -c release --package-path Packages/TextworkEditor TextworkEditorBench | tee benchmark-results.json
@@ -38,6 +38,8 @@ jobs:
             swift-version.txt
 
       - name: Build macOS app
+        # Xcode passes -suppress-warnings to the local package. That flag
+        # conflicts with warnings-as-errors, so suppression stays off in CI.
         run: |
           xcodebuild \
             -project Textwork.xcodeproj \
@@ -45,4 +47,19 @@ jobs:
             -destination 'platform=macOS' \
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO \
+            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
+            GCC_TREAT_WARNINGS_AS_ERRORS=YES \
+            SWIFT_SUPPRESS_WARNINGS=NO \
             build
+
+      - name: Test macOS app
+        run: |
+          xcodebuild test \
+            -project Textwork.xcodeproj \
+            -scheme Textwork \
+            -destination 'platform=macOS' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
+            GCC_TREAT_WARNINGS_AS_ERRORS=YES \
+            SWIFT_SUPPRESS_WARNINGS=NO

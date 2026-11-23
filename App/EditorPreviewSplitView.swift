@@ -48,6 +48,7 @@ struct EditorPreviewSplitView<Editor: View, Preview: View>: NSViewRepresentable 
         context.coordinator.applyInitialPositionIfNeeded(splitView)
     }
 
+    @MainActor
     final class Coordinator: NSObject, NSSplitViewDelegate {
         var editorHost: NSHostingView<Editor>?
         var previewHost: NSHostingView<Preview>?

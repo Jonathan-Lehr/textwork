@@ -8,14 +8,38 @@
 
 /* Begin PBXBuildFile section */
 		AA00000000000000000000FA /* TextworkEditor in Frameworks */ = {isa = PBXBuildFile; productRef = AA00000000000000000000FB /* TextworkEditor */; };
+		BB0000000000000000000001 /* TextworkEditor in Frameworks */ = {isa = PBXBuildFile; productRef = AA00000000000000000000FB /* TextworkEditor */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		AA00000000000000000000F5 /* Textwork.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Textwork.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB0000000000000000000002 /* TextworkTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TextworkTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		BB0000000000000000000004 /* Exceptions for "App" folder in "TextworkTests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				TextworkApp.swift,
+			);
+			target = BB0000000000000000000007 /* TextworkTests */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		AA00000000000000000000F3 /* App */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = App; sourceTree = "<group>"; };
+		AA00000000000000000000F3 /* App */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				BB0000000000000000000004 /* Exceptions for "App" folder in "TextworkTests" target */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		BB0000000000000000000003 /* TextworkTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = TextworkTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -27,6 +51,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BB0000000000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BB0000000000000000000001 /* TextworkEditor in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -34,6 +66,7 @@
 			isa = PBXGroup;
 			children = (
 				AA00000000000000000000F3 /* App */,
+				BB0000000000000000000003 /* TextworkTests */,
 				AA00000000000000000000F4 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -42,6 +75,7 @@
 			isa = PBXGroup;
 			children = (
 				AA00000000000000000000F5 /* Textwork.app */,
+				BB0000000000000000000002 /* TextworkTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -72,6 +106,29 @@
 			productReference = AA00000000000000000000F5 /* Textwork.app */;
 			productType = "com.apple.product-type.application";
 		};
+		BB0000000000000000000007 /* TextworkTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BB000000000000000000000A /* Build configuration list for PBXNativeTarget "TextworkTests" */;
+			buildPhases = (
+				BB0000000000000000000006 /* Sources */,
+				BB0000000000000000000005 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				BB0000000000000000000003 /* TextworkTests */,
+				AA00000000000000000000F3 /* App */,
+			);
+			name = TextworkTests;
+			packageProductDependencies = (
+				AA00000000000000000000FB /* TextworkEditor */,
+			);
+			productName = TextworkTests;
+			productReference = BB0000000000000000000002 /* TextworkTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -83,6 +140,9 @@
 				LastUpgradeCheck = 2660;
 				TargetAttributes = {
 					AA00000000000000000000F6 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+					BB0000000000000000000007 = {
 						CreatedOnToolsVersion = 26.6;
 					};
 				};
@@ -105,6 +165,7 @@
 			projectRoot = "";
 			targets = (
 				AA00000000000000000000F6 /* Textwork */,
+				BB0000000000000000000007 /* TextworkTests */,
 			);
 		};
 /* End PBXProject section */
@@ -121,6 +182,13 @@
 
 /* Begin PBXSourcesBuildPhase section */
 		AA00000000000000000000F7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BB0000000000000000000006 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -226,6 +294,50 @@
 			};
 			name = Release;
 		};
+		BB0000000000000000000008 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jonathanlehr.TextworkTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		BB0000000000000000000009 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jonathanlehr.TextworkTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -243,6 +355,15 @@
 			buildConfigurations = (
 				AA0000000000000000000A03 /* Debug */,
 				AA0000000000000000000A04 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BB000000000000000000000A /* Build configuration list for PBXNativeTarget "TextworkTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BB0000000000000000000008 /* Debug */,
+				BB0000000000000000000009 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

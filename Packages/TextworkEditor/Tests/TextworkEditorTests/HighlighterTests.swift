@@ -206,6 +206,20 @@ final class HighlighterTests: XCTestCase {
         }
     }
 
+    func testDeletingAllTextKeepsInvalidatedRangesInsideTheDocument() {
+        let text = "# Title\n\nBody with *emphasis*.\n"
+        let snapshot = highlighter.highlight(text)
+        let cleared = highlighter.apply(
+            MarkdownEdit(range: 0..<text.utf16.count, replacement: ""),
+            to: snapshot
+        )
+        XCTAssertEqual(cleared.utf16Count, 0)
+        assertRangesInsideDocument(cleared.invalidatedUTF16Ranges, length: cleared.utf16Count)
+        let typed = highlighter.apply(MarkdownEdit(range: 0..<0, replacement: "Hello"), to: cleared)
+        XCTAssertEqual(typed.spans, highlighter.highlight("Hello").spans)
+        assertRangesInsideDocument(typed.invalidatedUTF16Ranges, length: typed.utf16Count)
+    }
+
     func testMiddleInsertInvalidatesAFractionOfTheDocument() {
         let text = String(repeating: sampleDocument, count: 20)
         let snapshot = highlighter.highlight(text)
@@ -256,6 +270,14 @@ final class HighlighterTests: XCTestCase {
         let start = String.Index(utf16Offset: span.startUTF16, in: text)
         let end = String.Index(utf16Offset: span.endUTF16, in: text)
         return String(text[start..<end])
+    }
+
+    private func assertRangesInsideDocument(_ ranges: [Range<Int>], length: Int) {
+        for range in ranges {
+            XCTAssertGreaterThanOrEqual(range.lowerBound, 0)
+            XCTAssertLessThan(range.lowerBound, range.upperBound)
+            XCTAssertLessThanOrEqual(range.upperBound, length)
+        }
     }
 
     private func applying(_ edit: MarkdownEdit, to text: String) -> String {
