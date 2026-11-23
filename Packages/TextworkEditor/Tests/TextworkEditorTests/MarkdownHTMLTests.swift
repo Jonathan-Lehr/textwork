@@ -201,6 +201,23 @@ final class MarkdownHTMLTests: XCTestCase {
         XCTAssertTrue(document.contains(MarkdownHTMLRenderer.stylesheet))
     }
 
+    func testEditorBackgroundSurfaceReplacesThePageWash() {
+        let editorBackground = renderer.document(
+            wrapping: "<p>Hi</p>",
+            title: "Preview",
+            surface: .editorBackground
+        )
+        let light = HighlightTheme.lightEditorBackground.cssHex
+        let dark = HighlightTheme.darkEditorBackground.cssHex
+        XCTAssertTrue(editorBackground.contains("html, body { background: \(light); }"))
+        XCTAssertTrue(editorBackground.contains("html, body { background: \(dark); }"))
+        XCTAssertTrue(editorBackground.contains("prefers-color-scheme: dark"))
+
+        let wash = renderer.document(wrapping: "<p>Hi</p>", title: "Preview")
+        XCTAssertFalse(wash.contains("html, body { background: \(light); }"))
+        XCTAssertTrue(wash.contains("--page: rgba(0, 0, 0, 0.05);"))
+    }
+
     func testPreviewPathsStayInsideTheDocumentDirectory() {
         let root = URL(fileURLWithPath: "/Users/example/Notes", isDirectory: true).standardizedFileURL
         let image = MarkdownHTMLRenderer.fileURL(forPreviewPath: "images/figure.png", in: root)

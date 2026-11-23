@@ -2,6 +2,11 @@ import SwiftUI
 import TextworkEditor
 
 /// Read-only rendered Markdown. This view is not a text editor.
+///
+/// On macOS 26 and iOS 26 a Liquid Glass frame replaces the gray wash. The
+/// frame does not receive hits, so the page still scrolls, selects, and opens
+/// links. The words stay on the editor background the palette was tuned
+/// against. A glass sheet over the article would blur them.
 struct PreviewCard: View {
     var markdown: String
     var resourceDirectory: URL?
@@ -20,13 +25,12 @@ struct PreviewCard: View {
     var body: some View {
         MarkdownPreviewWebView(bodyHTML: renderedBody, resourceDirectory: resourceDirectory)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.primary.opacity(0.05))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color.secondary.opacity(0.45), lineWidth: 1)
-            )
-            .padding(16)
+            .background(PreviewSurface.cardBackground)
+            .clipShape(PreviewCardLayout.card)
+            .overlay {
+                PreviewGlassFrame()
+            }
+            .padding(PreviewCardLayout.outerPadding)
             .accessibilityLabel("Markdown preview")
             .onChange(of: markdown) { _, newValue in
                 scheduleRender(of: newValue)

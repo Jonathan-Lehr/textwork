@@ -10,6 +10,16 @@ public enum MarkdownImageAddressing: Sendable, Equatable {
     case preview
 }
 
+/// Page fill for a rendered document.
+///
+/// Exported HTML keeps the translucent wash from the stylesheet. The preview
+/// can ask for the editor background instead, so the words sit on the surface
+/// the highlight palette was tuned against.
+public enum MarkdownPageSurface: Sendable, Equatable {
+    case translucentWash
+    case editorBackground
+}
+
 /// Renders Markdown to HTML for the preview and for HTML export.
 ///
 /// One pipeline covers both. The grammar is CommonMark plus GitHub-flavored
@@ -142,7 +152,11 @@ public struct MarkdownHTMLRenderer: Sendable {
     }
 
     /// Wraps an already rendered body. The preview uses this for the shell page.
-    public func document(wrapping body: String, title: String = "") -> String {
+    public func document(
+        wrapping body: String,
+        title: String = "",
+        surface: MarkdownPageSurface = .translucentWash
+    ) -> String {
         let safeTitle = escapeText(title.isEmpty ? "Textwork" : title)
         return """
         <!DOCTYPE html>
@@ -155,6 +169,7 @@ public struct MarkdownHTMLRenderer: Sendable {
         <title>\(safeTitle)</title>
         <style>
         \(Self.stylesheet)
+        \(surfaceOverrideStyle(surface))
         </style>
         </head>
         <body>
@@ -164,6 +179,24 @@ public struct MarkdownHTMLRenderer: Sendable {
         </body>
         </html>
         """
+    }
+
+    /// Later rules in the same style element replace the wash. An empty string
+    /// leaves the stylesheet's `--page` color in place.
+    private func surfaceOverrideStyle(_ surface: MarkdownPageSurface) -> String {
+        switch surface {
+        case .translucentWash:
+            return ""
+        case .editorBackground:
+            let light = HighlightTheme.lightEditorBackground.cssHex
+            let dark = HighlightTheme.darkEditorBackground.cssHex
+            return """
+            html, body { background: \(light); }
+            @media (prefers-color-scheme: dark) {
+              html, body { background: \(dark); }
+            }
+            """
+        }
     }
 
     /// Resolves a preview image or link path and refuses anything outside `directory`.
