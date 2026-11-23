@@ -199,6 +199,8 @@ final class MarkdownHTMLTests: XCTestCase {
         XCTAssertFalse(document.contains("<script"))
         XCTAssertTrue(document.contains("&lt;script&gt;"))
         XCTAssertTrue(document.contains(MarkdownHTMLRenderer.stylesheet))
+        XCTAssertTrue(document.contains("background: canvas"))
+        XCTAssertFalse(document.contains("--page:"))
     }
 
     func testPreviewPathsStayInsideTheDocumentDirectory() {

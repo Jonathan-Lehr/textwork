@@ -43,21 +43,19 @@ public struct MarkdownHTMLRenderer: Sendable {
         \(theme.previewCustomProperties(forDarkAppearance: false))
           --table-fill: rgba(0, 0, 0, 0.06);
           --line: rgba(0, 0, 0, 0.14);
-          --page: rgba(0, 0, 0, 0.05);
         }
         @media (prefers-color-scheme: dark) {
           :root {
         \(theme.previewCustomProperties(forDarkAppearance: true))
             --table-fill: rgba(255, 255, 255, 0.08);
             --line: rgba(255, 255, 255, 0.16);
-            --page: rgba(255, 255, 255, 0.06);
           }
         }
         * { box-sizing: border-box; }
         html, body {
           margin: 0;
           min-height: 100%;
-          background: var(--page);
+          background: canvas;
           color: var(--text);
           font: 15px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
         }

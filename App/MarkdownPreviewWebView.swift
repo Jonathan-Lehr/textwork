@@ -83,17 +83,13 @@ final class MarkdownPreviewCoordinator: NSObject, WKNavigationDelegate {
         webView.allowsBackForwardNavigationGestures = false
         #if os(macOS)
         webView.allowsMagnification = false
-        webView.underPageBackgroundColor = NSColor(name: nil, dynamicProvider: { appearance in
-            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            return isDark
-                ? NSColor(calibratedWhite: 1, alpha: 0.06)
-                : NSColor(calibratedWhite: 0, alpha: 0.05)
-        })
+        webView.underPageBackgroundColor = .textBackgroundColor
         webView.setAccessibilityLabel("Markdown preview")
         #else
         webView.isOpaque = false
-        webView.backgroundColor = .clear
-        webView.scrollView.backgroundColor = .clear
+        webView.backgroundColor = .systemBackground
+        webView.scrollView.backgroundColor = .systemBackground
+        webView.underPageBackgroundColor = .systemBackground
         webView.accessibilityLabel = "Markdown preview"
         #endif
         #if DEBUG

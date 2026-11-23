@@ -2,6 +2,8 @@ import SwiftUI
 import TextworkEditor
 
 /// Read-only rendered Markdown. This view is not a text editor.
+///
+/// The preview fills its pane. It has no card fill, border, or inset.
 struct PreviewCard: View {
     var markdown: String
     var resourceDirectory: URL?
@@ -20,13 +22,6 @@ struct PreviewCard: View {
     var body: some View {
         MarkdownPreviewWebView(bodyHTML: renderedBody, resourceDirectory: resourceDirectory)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.primary.opacity(0.05))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color.secondary.opacity(0.45), lineWidth: 1)
-            )
-            .padding(16)
             .accessibilityLabel("Markdown preview")
             .onChange(of: markdown) { _, newValue in
                 scheduleRender(of: newValue)
