@@ -218,7 +218,7 @@ final class HighlightThemeTests: XCTestCase {
         XCTAssertTrue(stylesheet.contains("width: min(78.2ch, 100%)"))
         XCTAssertTrue(stylesheet.contains("font: 15px/1.55 -apple-system"))
         XCTAssertTrue(stylesheet.contains("font-size: calc(12.9px + 1pt)"))
-        XCTAssertTrue(stylesheet.contains("line-height: calc(18.705px - 3pt)"))
+        XCTAssertTrue(stylesheet.contains("line-height: calc(18.705px - 4pt)"))
         XCTAssertTrue(stylesheet.contains("h1 { font-size: 2rem;"))
         XCTAssertFalse(stylesheet.contains("language-"))
         XCTAssertTrue(stylesheet.contains("color-scheme: light dark"))

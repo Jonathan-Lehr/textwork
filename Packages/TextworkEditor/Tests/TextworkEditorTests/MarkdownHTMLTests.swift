@@ -197,7 +197,7 @@ final class MarkdownHTMLTests: XCTestCase {
         XCTAssertTrue(document.contains("color: var(--text)"))
         XCTAssertTrue(document.contains("background: var(--code-fill)"))
         XCTAssertTrue(document.contains("font-size: calc(12.9px + 1pt)"))
-        XCTAssertTrue(document.contains("line-height: calc(18.705px - 3pt)"))
+        XCTAssertTrue(document.contains("line-height: calc(18.705px - 4pt)"))
         XCTAssertTrue(document.contains("margin-inline: auto"))
         XCTAssertTrue(document.contains("h2 { font-size: 1.55rem;"))
         XCTAssertTrue(document.contains("script-src 'none'"))
