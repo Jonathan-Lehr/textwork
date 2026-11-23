@@ -29,75 +29,92 @@ public struct MarkdownHTMLRenderer: Sendable {
     }
 
     /// The default stylesheet. The preview and HTML export both embed it.
-    public static let stylesheet = """
-    :root {
-      color-scheme: light dark;
-      --text: light-dark(#1d1d1f, #f5f5f7);
-      --secondary: light-dark(#424245, #d2d2d7);
-      --line: light-dark(rgba(0, 0, 0, 0.14), rgba(255, 255, 255, 0.16));
-      --code: light-dark(rgba(0, 0, 0, 0.06), rgba(255, 255, 255, 0.08));
-      --quote: light-dark(#86868b, #98989d);
-      --link: light-dark(#0066cc, #419cff);
-    }
-    * { box-sizing: border-box; }
-    html, body {
-      margin: 0;
-      min-height: 100%;
-      background: light-dark(rgba(0, 0, 0, 0.05), rgba(255, 255, 255, 0.06));
-      color: var(--text);
-      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
-    }
-    article {
-      box-sizing: border-box;
-      width: min(68ch, 100%);
-      margin-inline: auto;
-      padding: 28px 32px 48px;
-    }
-    h1, h2, h3, h4, h5, h6 {
-      line-height: 1.25;
-      letter-spacing: -0.02em;
-    }
-    h1 { font-size: 2rem; font-weight: 700; margin: 0 0 0.45em; }
-    h2 { font-size: 1.55rem; font-weight: 600; margin: 1.15em 0 0.4em; }
-    h3 { font-size: 1.28rem; font-weight: 600; margin: 1.1em 0 0.35em; }
-    h4 { font-size: 1.1rem; font-weight: 600; margin: 1em 0 0.3em; }
-    h5 { font-size: 1rem; font-weight: 600; margin: 1em 0 0.3em; }
-    h6 { font-size: 0.92rem; font-weight: 600; margin: 1em 0 0.3em; color: var(--secondary); }
-    p { margin: 0 0 0.8em; }
-    a { color: var(--link); text-underline-offset: 2px; }
-    code {
-      font-family: ui-monospace, "SF Mono", Menlo, monospace;
-      font-size: 0.9em;
-      background: var(--code);
-      padding: 0.12em 0.35em;
-      border-radius: 5px;
-    }
-    pre {
-      background: var(--code);
-      padding: 14px 16px;
-      border-radius: 10px;
-      overflow: auto;
-      margin: 0 0 0.9em;
-    }
-    pre code { background: none; padding: 0; font-size: 0.86rem; line-height: 1.45; }
-    blockquote {
-      margin: 0 0 0.9em;
-      padding: 0.1em 0 0.1em 1em;
-      border-left: 3px solid var(--quote);
-      color: var(--secondary);
-    }
-    blockquote p:last-child { margin-bottom: 0; }
-    ul, ol { margin: 0 0 0.9em; padding-left: 1.4em; }
-    li { margin: 0.2em 0; }
-    li > ul, li > ol { margin: 0.25em 0 0.2em; }
-    li.task { list-style: none; margin-left: -0.2em; }
-    li.task input { margin-right: 0.4em; }
-    table { border-collapse: collapse; margin: 0 0 1em; width: 100%; }
-    th, td { border: 1px solid var(--line); padding: 6px 10px; vertical-align: top; }
-    th { font-weight: 600; text-align: left; background: var(--code); }
-    hr { border: 0; border-top: 1px solid var(--line); margin: 1.4em 0; }
-    img { max-width: 100%; height: auto; }
-    """
+    ///
+    /// Role colors come from ``HighlightTheme/standard``. Light values sit on
+    /// `:root`. Dark values replace them under `prefers-color-scheme: dark`.
+    /// Inline code keeps a light gray chip. Fenced and indented code do not.
+    /// Emphasis and strong inherit the body color. Margins and the type scale
+    /// stay as they are.
+    public static let stylesheet: String = {
+        let theme = HighlightTheme.standard
+        return """
+        :root {
+          color-scheme: light dark;
+        \(theme.previewCustomProperties(forDarkAppearance: false))
+          --table-fill: rgba(0, 0, 0, 0.06);
+          --line: rgba(0, 0, 0, 0.14);
+          --page: rgba(0, 0, 0, 0.05);
+        }
+        @media (prefers-color-scheme: dark) {
+          :root {
+        \(theme.previewCustomProperties(forDarkAppearance: true))
+            --table-fill: rgba(255, 255, 255, 0.08);
+            --line: rgba(255, 255, 255, 0.16);
+            --page: rgba(255, 255, 255, 0.06);
+          }
+        }
+        * { box-sizing: border-box; }
+        html, body {
+          margin: 0;
+          min-height: 100%;
+          background: var(--page);
+          color: var(--text);
+          font: 15px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+        }
+        article {
+          box-sizing: border-box;
+          width: min(68ch, 100%);
+          margin-inline: auto;
+          padding: 28px 32px 48px;
+        }
+        h1, h2, h3, h4, h5, h6 {
+          line-height: 1.25;
+          letter-spacing: -0.02em;
+        }
+        h1 { font-size: 2rem; font-weight: 700; margin: 0 0 0.45em; }
+        h2 { font-size: 1.55rem; font-weight: 600; margin: 1.15em 0 0.4em; }
+        h3 { font-size: 1.28rem; font-weight: 600; margin: 1.1em 0 0.35em; }
+        h4 { font-size: 1.1rem; font-weight: 600; margin: 1em 0 0.3em; }
+        h5 { font-size: 1rem; font-weight: 600; margin: 1em 0 0.3em; }
+        h6 { font-size: 0.92rem; font-weight: 600; margin: 1em 0 0.3em; }
+        p { margin: 0 0 0.8em; }
+        a { color: var(--link); text-underline-offset: 2px; }
+        code {
+          font-family: ui-monospace, "SF Mono", Menlo, monospace;
+          font-size: 0.9em;
+          color: var(--code);
+          background: var(--code-fill);
+          padding: 0.12em 0.35em;
+          border-radius: 5px;
+        }
+        pre {
+          color: var(--code);
+          padding: 14px 16px;
+          border-radius: 10px;
+          overflow: auto;
+          margin: 0 0 0.9em;
+        }
+        pre code { background: none; padding: 0; font-size: 0.86rem; line-height: 1.45; }
+        blockquote {
+          margin: 0 0 0.9em;
+          padding: 0.1em 0 0.1em 1em;
+          border-left: 3px solid var(--quote-marker);
+          color: var(--quote);
+        }
+        blockquote p:last-child { margin-bottom: 0; }
+        ul, ol { margin: 0 0 0.9em; padding-left: 1.4em; }
+        li { margin: 0.2em 0; }
+        li::marker { color: var(--list-marker); }
+        li > ul, li > ol { margin: 0.25em 0 0.2em; }
+        li.task { list-style: none; margin-left: -0.2em; }
+        li.task input { margin-right: 0.4em; }
+        table { border-collapse: collapse; margin: 0 0 1em; width: 100%; }
+        th, td { border: 1px solid var(--line); padding: 6px 10px; vertical-align: top; }
+        th { font-weight: 600; text-align: left; background: var(--table-fill); }
+        hr { border: 0; border-top: 1px solid var(--thematic-break); margin: 1.4em 0; }
+        img { max-width: 100%; height: auto; }
+        """
+    }()
 
     /// Policy for a document this renderer produced. Page scripts are refused.
     public var contentSecurityPolicy: String {

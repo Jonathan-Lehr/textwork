@@ -131,10 +131,10 @@ struct MarkdownTextEditor: NSViewRepresentable {
                 storage.setAttributes(configuration.baseAttributes(), range: nsRange)
             }
             for span in affected where !span.isSyntax {
-                HighlightColors.applyContent(span, configuration: configuration, to: storage, limits: ranges)
+                HighlightColors.apply(span, configuration: configuration, to: storage, limits: ranges)
             }
             for span in affected where span.isSyntax {
-                HighlightColors.applySyntax(span, configuration: configuration, to: storage, limits: ranges)
+                HighlightColors.apply(span, configuration: configuration, to: storage, limits: ranges)
             }
             storage.endEditing()
         }
@@ -142,64 +142,47 @@ struct MarkdownTextEditor: NSViewRepresentable {
 }
 
 private enum HighlightColors {
-    static var syntax: NSColor { NSColor.tertiaryLabelColor }
-    static var link: NSColor { NSColor.linkColor }
-    static var html: NSColor { NSColor.systemTeal }
-    static var codeBackground: NSColor { NSColor.quaternaryLabelColor.withAlphaComponent(0.35) }
-
-    static func applyContent(
+    static func apply(
         _ span: HighlightSpan,
         configuration: EditorConfiguration,
         to storage: NSTextStorage,
         limits: [Range<Int>]
     ) {
+        let style = configuration.theme.runStyle(for: span.role, isSyntax: span.isSyntax)
         for range in clippedRanges(of: span, limits: limits, length: storage.length) {
-            applyContent(span, configuration: configuration, to: storage, range: range)
+            apply(span, style: style, configuration: configuration, to: storage, range: range)
         }
     }
 
-    static func applyContent(
+    static func apply(
         _ span: HighlightSpan,
+        style: HighlightRunStyle,
         configuration: EditorConfiguration,
         to storage: NSTextStorage,
         range: NSRange
     ) {
         var font = (storage.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont) ?? configuration.bodyFont()
         let manager = NSFontManager.shared
-        switch span.role {
-        case .heading1, .heading2, .heading3, .heading4, .heading5, .heading6:
+        switch style.fontTreatment {
+        case .body:
+            font = configuration.bodyFont()
+        case .monospaced:
+            font = configuration.monospacedFont()
+        case .heading:
             let size = configuration.resolvedFontSize + headingBoost(span.role)
             font = manager.convert(configuration.font(ofSize: size), toHaveTrait: .boldFontMask)
         case .emphasis:
             font = manager.convert(font, toHaveTrait: .italicFontMask)
         case .strong:
             font = manager.convert(font, toHaveTrait: .boldFontMask)
-        case .codeSpan, .codeBlock:
-            font = configuration.monospacedFont()
-            storage.addAttribute(.backgroundColor, value: codeBackground, range: range)
-        case .link, .image:
-            storage.addAttribute(.foregroundColor, value: link, range: range)
-            storage.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
-        case .html:
-            font = configuration.monospacedFont()
-            storage.addAttribute(.foregroundColor, value: html, range: range)
-        case .table, .listMarker, .blockQuote, .thematicBreak:
-            break
         }
         storage.addAttribute(.font, value: font, range: range)
-    }
-
-    static func applySyntax(
-        _ span: HighlightSpan,
-        configuration: EditorConfiguration,
-        to storage: NSTextStorage,
-        limits: [Range<Int>]
-    ) {
-        for range in clippedRanges(of: span, limits: limits, length: storage.length) {
-            storage.addAttributes(
-                [.font: configuration.bodyFont(), .foregroundColor: syntax],
-                range: range
-            )
+        storage.addAttribute(.foregroundColor, value: configuration.theme.platformColor(style.foreground), range: range)
+        if let background = style.background {
+            storage.addAttribute(.backgroundColor, value: configuration.theme.platformColor(background), range: range)
+        }
+        if style.underline {
+            storage.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
         }
     }
 
@@ -278,7 +261,7 @@ struct MarkdownTextEditor: UIViewRepresentable {
 
         func textStorage(
             _ textStorage: NSTextStorage,
-            didProcessEditing editedMask: NSTextStorageEditActions,
+            didProcessEditing editedMask: NSTextStorage.EditActions,
             range editedRange: NSRange,
             changeInLength delta: Int
         ) {
@@ -318,10 +301,10 @@ struct MarkdownTextEditor: UIViewRepresentable {
                 storage.setAttributes(configuration.baseAttributes(), range: nsRange)
             }
             for span in affected where !span.isSyntax {
-                HighlightColors.applyContent(span, configuration: configuration, to: storage, limits: ranges)
+                HighlightColors.apply(span, configuration: configuration, to: storage, limits: ranges)
             }
             for span in affected where span.isSyntax {
-                HighlightColors.applySyntax(span, configuration: configuration, to: storage, limits: ranges)
+                HighlightColors.apply(span, configuration: configuration, to: storage, limits: ranges)
             }
             storage.endEditing()
         }
@@ -329,63 +312,46 @@ struct MarkdownTextEditor: UIViewRepresentable {
 }
 
 private enum HighlightColors {
-    static var syntax: UIColor { UIColor.tertiaryLabel }
-    static var link: UIColor { UIColor.link }
-    static var html: UIColor { UIColor.systemTeal }
-    static var codeBackground: UIColor { UIColor.tertiarySystemFill }
-
-    static func applyContent(
+    static func apply(
         _ span: HighlightSpan,
         configuration: EditorConfiguration,
         to storage: NSTextStorage,
         limits: [Range<Int>]
     ) {
+        let style = configuration.theme.runStyle(for: span.role, isSyntax: span.isSyntax)
         for range in clippedRanges(of: span, limits: limits, length: storage.length) {
-            applyContent(span, configuration: configuration, to: storage, range: range)
+            apply(span, style: style, configuration: configuration, to: storage, range: range)
         }
     }
 
-    static func applyContent(
+    static func apply(
         _ span: HighlightSpan,
+        style: HighlightRunStyle,
         configuration: EditorConfiguration,
         to storage: NSTextStorage,
         range: NSRange
     ) {
         var font = (storage.attribute(.font, at: range.location, effectiveRange: nil) as? UIFont) ?? configuration.bodyFont()
-        switch span.role {
-        case .heading1, .heading2, .heading3, .heading4, .heading5, .heading6:
+        switch style.fontTreatment {
+        case .body:
+            font = configuration.bodyFont()
+        case .monospaced:
+            font = configuration.monospacedFont()
+        case .heading:
             let size = configuration.resolvedFontSize + headingBoost(span.role)
             font = adding(.traitBold, to: configuration.font(ofSize: size))
         case .emphasis:
             font = adding(.traitItalic, to: font)
         case .strong:
             font = adding(.traitBold, to: font)
-        case .codeSpan, .codeBlock:
-            font = configuration.monospacedFont()
-            storage.addAttribute(.backgroundColor, value: codeBackground, range: range)
-        case .link, .image:
-            storage.addAttribute(.foregroundColor, value: link, range: range)
-            storage.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
-        case .html:
-            font = configuration.monospacedFont()
-            storage.addAttribute(.foregroundColor, value: html, range: range)
-        case .table, .listMarker, .blockQuote, .thematicBreak:
-            break
         }
         storage.addAttribute(.font, value: font, range: range)
-    }
-
-    static func applySyntax(
-        _ span: HighlightSpan,
-        configuration: EditorConfiguration,
-        to storage: NSTextStorage,
-        limits: [Range<Int>]
-    ) {
-        for range in clippedRanges(of: span, limits: limits, length: storage.length) {
-            storage.addAttributes(
-                [.font: configuration.bodyFont(), .foregroundColor: syntax],
-                range: range
-            )
+        storage.addAttribute(.foregroundColor, value: configuration.theme.platformColor(style.foreground), range: range)
+        if let background = style.background {
+            storage.addAttribute(.backgroundColor, value: configuration.theme.platformColor(background), range: range)
+        }
+        if style.underline {
+            storage.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
         }
     }
 
