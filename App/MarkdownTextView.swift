@@ -236,7 +236,6 @@ private enum HighlightColors {
         range: NSRange
     ) {
         var font = (storage.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont) ?? configuration.bodyFont()
-        let manager = NSFontManager.shared
         switch style.fontTreatment {
         case .body:
             font = configuration.bodyFont()
@@ -244,11 +243,11 @@ private enum HighlightColors {
             font = configuration.monospacedFont()
         case .heading:
             let size = configuration.resolvedFontSize + headingBoost(span.role)
-            font = manager.convert(configuration.font(ofSize: size), toHaveTrait: .boldFontMask)
+            font = configuration.boldFont(ofSize: size)
         case .emphasis:
-            font = manager.convert(font, toHaveTrait: .italicFontMask)
+            font = configuration.fontAddingItalic(to: font)
         case .strong:
-            font = manager.convert(font, toHaveTrait: .boldFontMask)
+            font = configuration.fontAddingBold(to: font)
         }
         storage.addAttribute(.font, value: font, range: range)
         storage.addAttribute(.foregroundColor, value: configuration.theme.platformColor(style.foreground), range: range)
@@ -453,11 +452,11 @@ private enum HighlightColors {
             font = configuration.monospacedFont()
         case .heading:
             let size = configuration.resolvedFontSize + headingBoost(span.role)
-            font = adding(.traitBold, to: configuration.font(ofSize: size))
+            font = configuration.boldFont(ofSize: size)
         case .emphasis:
-            font = adding(.traitItalic, to: font)
+            font = configuration.fontAddingItalic(to: font)
         case .strong:
-            font = adding(.traitBold, to: font)
+            font = configuration.fontAddingBold(to: font)
         }
         storage.addAttribute(.font, value: font, range: range)
         storage.addAttribute(.foregroundColor, value: configuration.theme.platformColor(style.foreground), range: range)
@@ -467,13 +466,6 @@ private enum HighlightColors {
         if style.underline {
             storage.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
         }
-    }
-
-    static func adding(_ trait: UIFontDescriptor.SymbolicTraits, to font: UIFont) -> UIFont {
-        var traits = font.fontDescriptor.symbolicTraits
-        traits.insert(trait)
-        guard let descriptor = font.fontDescriptor.withSymbolicTraits(traits) else { return font }
-        return UIFont(descriptor: descriptor, size: font.pointSize)
     }
 
     static func headingBoost(_ role: HighlightRole) -> CGFloat {

@@ -18,7 +18,7 @@ final class HighlightThemeTests: XCTestCase {
             .heading6: ExpectedColors("#1D1D1F", "#F5F5F7", "#5D72B0", "#7786BD"),
             .emphasis: ExpectedColors("#1D1D1F", "#F5F5F7", "#6E6E73", "#98989D"),
             .strong: ExpectedColors("#1D1D1F", "#F5F5F7", "#6E6E73", "#98989D"),
-            .codeSpan: ExpectedColors("#A8284A", "#FFA0B8", "#B9516C", "#B67686"),
+            .codeSpan: ExpectedColors("#1D1D1F", "#F5F5F7", "#6E6E73", "#98989D"),
             .codeBlock: ExpectedColors("#A8284A", "#FFA0B8", "#B9516C", "#B67686"),
             .codeKeyword: ExpectedColors("#1A4FC4", "#8EB4FF", "#4670CF", "#6E88BE"),
             .codeString: ExpectedColors("#146228", "#86D996", "#438153", "#60946A"),
@@ -94,10 +94,11 @@ final class HighlightThemeTests: XCTestCase {
         XCTAssertEqual(theme.color(for: .heading1, isSyntax: false), theme.body)
         XCTAssertEqual(theme.color(for: .emphasis, isSyntax: false), theme.body)
         XCTAssertEqual(theme.color(for: .strong, isSyntax: false), theme.body)
+        XCTAssertEqual(theme.color(for: .codeSpan, isSyntax: false), theme.body)
         XCTAssertEqual(theme.color(for: .heading1, isSyntax: true).light.cssHex, "#5D72B0")
         XCTAssertNotEqual(theme.color(for: .emphasis, isSyntax: true), theme.color(for: .emphasis, isSyntax: false))
-        XCTAssertEqual(theme.inlineCodeBackground.light.cssHex, "#F3F3F5")
-        XCTAssertEqual(theme.inlineCodeBackground.dark.cssHex, "#2A2A2E")
+        XCTAssertEqual(theme.inlineCodeBackground.light.cssHex, "#F9F9FA")
+        XCTAssertEqual(theme.inlineCodeBackground.dark.cssHex, "#242426")
         let code = theme.color(for: .codeSpan, isSyntax: false)
         XCTAssertGreaterThanOrEqual(contrast(code.light, theme.inlineCodeBackground.light), 4.5)
         XCTAssertGreaterThanOrEqual(contrast(code.dark, theme.inlineCodeBackground.dark), 4.5)
@@ -124,7 +125,8 @@ final class HighlightThemeTests: XCTestCase {
         for role in [HighlightRole.heading2, .heading3, .heading4, .heading5, .heading6] {
             XCTAssertEqual(theme.colors(for: role), theme.colors(for: .heading1))
         }
-        XCTAssertEqual(theme.colors(for: .codeSpan), theme.colors(for: .codeBlock))
+        XCTAssertEqual(theme.color(for: .codeSpan, isSyntax: false), theme.body)
+        XCTAssertNotEqual(theme.colors(for: .codeSpan), theme.colors(for: .codeBlock))
         XCTAssertNotEqual(theme.color(for: .heading1, isSyntax: false), theme.color(for: .link, isSyntax: false))
 
         let fences = [
@@ -201,15 +203,22 @@ final class HighlightThemeTests: XCTestCase {
         if let preStart = stylesheet.range(of: "pre {") {
             let afterPre = stylesheet[preStart.upperBound...]
             if let preEnd = afterPre.range(of: "}") {
-                XCTAssertFalse(stylesheet[preStart.lowerBound..<preEnd.upperBound].contains("background"))
+                let rule = stylesheet[preStart.lowerBound..<preEnd.upperBound]
+                XCTAssertTrue(rule.contains("background: var(--code-fill)"))
+                XCTAssertTrue(rule.contains("border-radius: 5px"))
+                XCTAssertTrue(rule.contains("padding: 14px 16px"))
             } else {
                 XCTFail("Unclosed pre rule")
             }
         } else {
             XCTFail("Missing pre rule")
         }
+        XCTAssertTrue(stylesheet.contains("color: var(--text)"))
         XCTAssertTrue(stylesheet.contains("padding: 0.12em 0.35em"))
-        XCTAssertTrue(stylesheet.contains("width: min(68ch, 100%)"))
+        XCTAssertTrue(stylesheet.contains("width: min(78.2ch, 100%)"))
+        XCTAssertTrue(stylesheet.contains("font: 15px/1.55 -apple-system"))
+        XCTAssertTrue(stylesheet.contains("font-size: calc(12.9px + 1pt)"))
+        XCTAssertTrue(stylesheet.contains("line-height: 1.3;"))
         XCTAssertTrue(stylesheet.contains("h1 { font-size: 2rem;"))
         XCTAssertFalse(stylesheet.contains("language-"))
         XCTAssertTrue(stylesheet.contains("color-scheme: light dark"))

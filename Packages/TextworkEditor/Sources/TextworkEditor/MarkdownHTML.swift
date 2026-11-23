@@ -32,9 +32,14 @@ public struct MarkdownHTMLRenderer: Sendable {
     ///
     /// Role colors come from ``HighlightTheme/standard``. Light values sit on
     /// `:root`. Dark values replace them under `prefers-color-scheme: dark`.
-    /// Inline code keeps a light gray chip. Fenced and indented code do not.
-    /// Emphasis and strong inherit the body color. Margins and the type scale
-    /// stay as they are.
+    /// Inline code keeps a light gray chip and uses the body text color.
+    /// Fenced code uses that same chip, the same 5px corner radius, and
+    /// 14px by 16px of padding, in light and dark. Emphasis and strong inherit
+    /// the body color. Heading sizes stay as they are. The article max width
+    /// is 78.2ch, 15% wider than 68ch. Fenced code is 1pt larger than 12.9px
+    /// (0.86rem at the 15px root). Its line height is 1.3, about 18.50px,
+    /// on both `pre` and `pre code`. `pre code` is a block so that length
+    /// forms the line boxes.
     public static let stylesheet: String = {
         let theme = HighlightTheme.standard
         return """
@@ -61,7 +66,7 @@ public struct MarkdownHTMLRenderer: Sendable {
         }
         article {
           box-sizing: border-box;
-          width: min(68ch, 100%);
+          width: min(78.2ch, 100%);
           margin-inline: auto;
           padding: 28px 32px 48px;
         }
@@ -80,19 +85,30 @@ public struct MarkdownHTMLRenderer: Sendable {
         code {
           font-family: ui-monospace, "SF Mono", Menlo, monospace;
           font-size: 0.9em;
-          color: var(--code);
+          color: var(--text);
           background: var(--code-fill);
           padding: 0.12em 0.35em;
           border-radius: 5px;
         }
         pre {
           color: var(--code);
+          background: var(--code-fill);
           padding: 14px 16px;
-          border-radius: 10px;
+          border-radius: 5px;
           overflow: auto;
           margin: 0 0 0.9em;
+          font-size: calc(12.9px + 1pt);
+          line-height: 1.3;
         }
-        pre code { background: none; padding: 0; font-size: 0.86rem; line-height: 1.45; }
+        pre code {
+          display: block;
+          color: var(--code);
+          background: none;
+          padding: 0;
+          border-radius: 0;
+          font-size: inherit;
+          line-height: 1.3;
+        }
         .code-keyword { color: var(--code-keyword); }
         .code-string { color: var(--code-string); }
         .code-number { color: var(--code-number); }
