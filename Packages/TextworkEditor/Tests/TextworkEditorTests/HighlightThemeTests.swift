@@ -26,8 +26,10 @@ final class HighlightThemeTests: XCTestCase {
             .codeComment: ExpectedColors("#5D6C79", "#6C7986", "#6C7985", "#65707C"),
             .codeType: ExpectedColors("#1C464A", "#9EF1DD", "#5A797B", "#649187"),
             .codeTag: ExpectedColors("#9B2393", "#FC5FA3", "#AE4EA8", "#DF5691"),
-            .codeAttribute: ExpectedColors("#815F03", "#BF8555", "#8E701D", "#AA794E"),
+            .codeAttribute: ExpectedColors("#3900A0", "#D0A8FF", "#8460C4", "#987CB8"),
             .codeMember: ExpectedColors("#326D74", "#67B7A4", "#467C82", "#569385"),
+            .codeVariable: ExpectedColors("#326D74", "#67B7A4", "#467C82", "#569385"),
+            .codeSystemType: ExpectedColors("#3900A0", "#D0A8FF", "#8460C4", "#987CB8"),
             .link: ExpectedColors("#0066CC", "#419CFF", "#1C77D2", "#3C8ADF"),
             .image: ExpectedColors("#086E68", "#78E0D6", "#27807B", "#54938D"),
             .listMarker: ExpectedColors("#3A4A78", "#BAC6E8", "#667396", "#80889D"),
@@ -117,6 +119,8 @@ final class HighlightThemeTests: XCTestCase {
         XCTAssertEqual(theme.runStyle(for: .codeSpan, isSyntax: true).fontTreatment, .monospaced)
         XCTAssertEqual(theme.runStyle(for: .codeBlock, isSyntax: false).fontTreatment, .monospaced)
         XCTAssertEqual(theme.runStyle(for: .codeBlock, isSyntax: true).fontTreatment, .monospaced)
+        XCTAssertEqual(theme.runStyle(for: .codeKeyword, isSyntax: false).fontTreatment, .boldMonospaced)
+        XCTAssertEqual(theme.runStyle(for: .codeKeyword, isSyntax: true).fontTreatment, .body)
         XCTAssertEqual(theme.runStyle(for: .html, isSyntax: false).fontTreatment, .monospaced)
         XCTAssertEqual(theme.runStyle(for: .html, isSyntax: true).fontTreatment, .body)
         XCTAssertEqual(theme.runStyle(for: .heading1, isSyntax: false).fontTreatment, .heading)
@@ -468,6 +472,8 @@ final class HighlightThemeTests: XCTestCase {
             font = body
         case .monospaced:
             font = mono
+        case .boldMonospaced:
+            font = NSFont(name: "Menlo-Bold", size: fontSize) ?? mono
         case .heading:
             let boost: CGFloat
             switch span.role {
@@ -529,7 +535,7 @@ final class HighlightThemeTests: XCTestCase {
             case .html:
                 font = mono
                 storage.addAttribute(.foregroundColor, value: NSColor.systemTeal, range: range)
-            case .table, .listMarker, .blockQuote, .thematicBreak, .codeKeyword, .codeString, .codeNumber, .codeComment, .codeType, .codeTag, .codeAttribute, .codeMember:
+            case .table, .listMarker, .blockQuote, .thematicBreak, .codeKeyword, .codeString, .codeNumber, .codeComment, .codeType, .codeTag, .codeAttribute, .codeMember, .codeVariable, .codeSystemType:
                 break
             }
             storage.addAttribute(.font, value: font, range: range)

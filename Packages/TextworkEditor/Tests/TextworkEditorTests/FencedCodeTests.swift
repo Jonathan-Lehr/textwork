@@ -25,8 +25,11 @@ final class FencedCodeTests: XCTestCase {
         XCTAssertTrue(pieces(source, role: .codeComment).joined(separator: "\n").contains("block"))
         let types = pieces(source, role: .codeType)
         XCTAssertTrue(types.contains("Foundation"))
-        XCTAssertTrue(types.contains("Int"))
-        XCTAssertTrue(types.contains("String"))
+        XCTAssertFalse(types.contains("Int"))
+        XCTAssertFalse(types.contains("String"))
+        let systemTypes = pieces(source, role: .codeSystemType)
+        XCTAssertTrue(systemTypes.contains("Int"))
+        XCTAssertTrue(systemTypes.contains("String"))
         XCTAssertEqual(pieces(source, role: .codeAttribute), ["@available"])
         XCTAssertTrue(pieces(source, role: .codeBlock).contains("let answer: Int = 42"))
         XCTAssertTrue(pieces(source, role: .codeMember).isEmpty)
@@ -62,8 +65,9 @@ final class FencedCodeTests: XCTestCase {
                 "highlight",
             ]
         )
-        XCTAssertTrue(pieces(source, role: .codeType).contains("NSAttributedString"))
-        XCTAssertTrue(pieces(source, role: .codeType).contains("String"))
+        XCTAssertTrue(pieces(source, role: .codeSystemType).contains("NSAttributedString"))
+        XCTAssertTrue(pieces(source, role: .codeSystemType).contains("String"))
+        XCTAssertFalse(pieces(source, role: .codeType).contains("NSAttributedString"))
         XCTAssertFalse(pieces(source, role: .codeMember).contains("NSAttributedString"))
         XCTAssertFalse(pieces(source, role: .codeMember).contains("greet"))
         XCTAssertFalse(pieces(source, role: .codeMember).contains("declared"))
@@ -76,6 +80,55 @@ final class FencedCodeTests: XCTestCase {
         XCTAssertTrue(pieces(source, role: .codeKeyword).contains("return"))
         XCTAssertEqual(pieces(source, role: .codeNumber), ["42"])
         XCTAssertTrue(pieces("```bash\necho(1)\n```", role: .codeMember).isEmpty)
+    }
+
+    func testSwiftBindingsAndSystemTypes() {
+        let source = """
+        ```swift
+        @Binding var text: String
+        @MainActor @State var configuration: EditorConfiguration
+        let highlighter = MarkdownHighlighter()
+        let count = text.count
+        guard let name = text else { return }
+        print(name)
+        if let value = name {
+            value
+        }
+        name
+        struct Sample {
+            var stored: Int
+            func read() { stored }
+        }
+        let outside = NSView()
+        UIView.self
+        ```
+        """
+        XCTAssertEqual(
+            pieces(source, role: .codeAttribute),
+            ["@Binding", "@MainActor", "@State"]
+        )
+        XCTAssertEqual(
+            pieces(source, role: .codeVariable),
+            [
+                "text", "configuration", "highlighter", "count", "text", "name", "text",
+                "name", "value", "name", "value", "stored", "stored", "outside",
+            ]
+        )
+        XCTAssertTrue(pieces(source, role: .codeSystemType).contains("String"))
+        XCTAssertTrue(pieces(source, role: .codeSystemType).contains("Int"))
+        XCTAssertTrue(pieces(source, role: .codeSystemType).contains("NSView"))
+        XCTAssertTrue(pieces(source, role: .codeSystemType).contains("UIView"))
+        XCTAssertTrue(pieces(source, role: .codeType).contains("EditorConfiguration"))
+        XCTAssertTrue(pieces(source, role: .codeType).contains("MarkdownHighlighter"))
+        XCTAssertTrue(pieces(source, role: .codeType).contains("Sample"))
+        XCTAssertFalse(pieces(source, role: .codeType).contains("String"))
+        XCTAssertFalse(pieces(source, role: .codeVariable).contains("read"))
+        XCTAssertTrue(pieces(source, role: .codeKeyword).contains("let"))
+        XCTAssertTrue(pieces(source, role: .codeKeyword).contains("var"))
+        XCTAssertTrue(pieces(source, role: .codeKeyword).contains("guard"))
+        XCTAssertTrue(pieces(source, role: .codeMember).contains("count"))
+        XCTAssertTrue(pieces(source, role: .codeMember).contains("print"))
+        XCTAssertFalse(pieces(source, role: .codeVariable).contains("print"))
     }
 
     func testJSONShellAndHTMLFences() {
@@ -177,7 +230,7 @@ final class FencedCodeTests: XCTestCase {
         let html = renderer.renderBody("```html\n<div class=\"x\">\n```")
         XCTAssertTrue(html.contains("<span class=\"code-tag\">div</span>"))
         XCTAssertTrue(html.contains("&quot;") || html.contains("class=\"code-string\""))
-        XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(".code-keyword { color: var(--code-keyword); }"))
+        XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(".code-keyword { color: var(--code-keyword); font-weight: bold; }"))
         XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(HighlightTheme.standard.color(for: .codeKeyword, isSyntax: false).light.cssHex))
         let members = renderer.renderBody("```swift\nstorage.length\napplyTypingAttributes()\nfunc greet() {}\n```")
         XCTAssertTrue(members.contains("<span class=\"code-member\">length</span>"))
@@ -186,6 +239,10 @@ final class FencedCodeTests: XCTestCase {
         XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(".code-member { color: var(--code-member); }"))
         XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(HighlightTheme.standard.color(for: .codeMember, isSyntax: false).light.cssHex))
         XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(HighlightTheme.standard.color(for: .codeMember, isSyntax: false).dark.cssHex))
+        XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(".code-variable { color: var(--code-variable); }"))
+        XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(".code-system-type { color: var(--code-system-type); }"))
+        XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(HighlightTheme.standard.color(for: .codeSystemType, isSyntax: false).light.cssHex))
+        XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(HighlightTheme.standard.color(for: .codeAttribute, isSyntax: false).dark.cssHex))
     }
 
     private func pieces(_ text: String, role: HighlightRole) -> [String] {

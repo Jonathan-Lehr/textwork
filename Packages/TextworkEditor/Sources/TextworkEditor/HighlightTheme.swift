@@ -59,6 +59,8 @@ public struct HighlightRoleColors: Equatable, Sendable, Hashable {
 public enum HighlightFontTreatment: Equatable, Sendable {
     case body
     case monospaced
+    /// Monospaced and bold. Keywords use this, matching Xcode's heavier keyword face.
+    case boldMonospaced
     case heading
     case emphasis
     case strong
@@ -101,9 +103,13 @@ public struct HighlightRunStyle: Equatable, Sendable {
 /// (Dark) themes. Tag names use the keyword color, which is how Xcode
 /// classifies an HTML tag. A Swift property or method name uses the project
 /// property and function color from those themes. That name is an identifier
-/// after a dot, or a name before a parenthesis. A name declared after `func`
-/// stays the plain code color. Keywords, capitalized types, and numbers keep
-/// their own colors. Plain code is that theme's plain text at 85 percent
+/// after a dot, or a name before a parenthesis. A name declared with `let` or
+/// `var`, and a later use of that name in the same brace block, uses that same
+/// color. A name declared after `func` stays the plain code color. Keywords
+/// are bold. Capitalized project types keep the type color. Apple framework
+/// types and standard-library types use the system type color, and so do
+/// attributes such as `@State`. Numbers keep their own color. Plain code is
+/// that theme's plain text at 85 percent
 /// opacity, resolved on the editor background. Marker colors are a quieter
 /// tint of the same hue. Inline code sits on ``inlineCodeBackground``.
 ///
@@ -224,19 +230,23 @@ public struct HighlightTheme: Equatable, Sendable {
             syntaxLight: (0xAE, 0x4E, 0xA8),
             syntaxDark: (0xDF, 0x56, 0x91)
         )
-        let codeAttribute = roleColors(
-            contentLight: (0x81, 0x5F, 0x03),
-            contentDark: (0xBF, 0x85, 0x55),
-            syntaxLight: (0x8E, 0x70, 0x1D),
-            syntaxDark: (0xAA, 0x79, 0x4E)
+        // Xcode `identifier.type.system` (Other Type Names). Attributes such as
+        // @State, @Binding, and @MainActor are shown in this color.
+        let codeSystemType = roleColors(
+            contentLight: (0x39, 0x00, 0xA0),
+            contentDark: (0xD0, 0xA8, 0xFF),
+            syntaxLight: (0x84, 0x60, 0xC4),
+            syntaxDark: (0x98, 0x7C, 0xB8)
         )
-        // Xcode project properties and project function names, both this pair.
+        let codeAttribute = codeSystemType
+        // Xcode project properties, project constants, and project function names.
         let codeMember = roleColors(
             contentLight: (0x32, 0x6D, 0x74),
             contentDark: (0x67, 0xB7, 0xA4),
             syntaxLight: (0x46, 0x7C, 0x82),
             syntaxDark: (0x56, 0x93, 0x85)
         )
+        let codeVariable = codeMember
         let roles: [HighlightRole: HighlightRoleColors] = [
             .heading1: heading,
             .heading2: heading,
@@ -256,6 +266,8 @@ public struct HighlightTheme: Equatable, Sendable {
             .codeTag: codeTag,
             .codeAttribute: codeAttribute,
             .codeMember: codeMember,
+            .codeVariable: codeVariable,
+            .codeSystemType: codeSystemType,
             .link: link,
             .image: image,
             .listMarker: list,
@@ -315,7 +327,9 @@ public struct HighlightTheme: Equatable, Sendable {
                 fontTreatment: .monospaced,
                 underline: false
             )
-        case .codeBlock, .html, .codeKeyword, .codeString, .codeNumber, .codeComment, .codeType, .codeTag, .codeAttribute, .codeMember:
+        case .codeKeyword:
+            return HighlightRunStyle(foreground: foreground, background: nil, fontTreatment: .boldMonospaced, underline: false)
+        case .codeBlock, .html, .codeString, .codeNumber, .codeComment, .codeType, .codeTag, .codeAttribute, .codeMember, .codeVariable, .codeSystemType:
             return HighlightRunStyle(foreground: foreground, background: nil, fontTreatment: .monospaced, underline: false)
         case .link, .image:
             return HighlightRunStyle(foreground: foreground, background: nil, fontTreatment: .body, underline: true)
@@ -341,6 +355,8 @@ public struct HighlightTheme: Equatable, Sendable {
             ("--code-tag", color(for: .codeTag, isSyntax: false)),
             ("--code-attribute", color(for: .codeAttribute, isSyntax: false)),
             ("--code-member", color(for: .codeMember, isSyntax: false)),
+            ("--code-variable", color(for: .codeVariable, isSyntax: false)),
+            ("--code-system-type", color(for: .codeSystemType, isSyntax: false)),
             ("--link", color(for: .link, isSyntax: false)),
             ("--quote", color(for: .blockQuote, isSyntax: false)),
             ("--quote-marker", color(for: .blockQuote, isSyntax: true)),
