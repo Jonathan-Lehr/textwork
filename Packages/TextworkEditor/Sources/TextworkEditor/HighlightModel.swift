@@ -22,6 +22,8 @@ public enum HighlightRole: String, Codable, Sendable, Equatable, CaseIterable {
     case codeType
     case codeTag
     case codeAttribute
+    /// A property or method name inside a fenced code block.
+    case codeMember
     case link
     case image
     case listMarker

@@ -116,6 +116,7 @@ public struct MarkdownHTMLRenderer: Sendable {
         .code-type { color: var(--code-type); }
         .code-tag { color: var(--code-tag); }
         .code-attribute { color: var(--code-attribute); }
+        .code-member { color: var(--code-member); }
         blockquote {
           margin: 0 0 0.9em;
           padding: 0.1em 0 0.1em 1em;

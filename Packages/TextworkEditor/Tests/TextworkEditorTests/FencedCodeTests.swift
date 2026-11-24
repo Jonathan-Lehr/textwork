@@ -29,6 +29,53 @@ final class FencedCodeTests: XCTestCase {
         XCTAssertTrue(types.contains("String"))
         XCTAssertEqual(pieces(source, role: .codeAttribute), ["@available"])
         XCTAssertTrue(pieces(source, role: .codeBlock).contains("let answer: Int = 42"))
+        XCTAssertTrue(pieces(source, role: .codeMember).isEmpty)
+    }
+
+    func testSwiftPropertiesAndMethodsUseTheMemberColor() {
+        let source = """
+        ```swift
+        let storage = textView.textStorage
+        storage.length
+        textView?.textStorage
+        panel . isVisible
+        applyTypingAttributes()
+        refresh ()
+        highlighter.highlight(source)
+        let value = NSAttributedString(string: "Code")
+        func greet(_ name: String) {}
+        func
+        declared()
+        if ready { return }
+        let count = 42
+        ```
+        """
+        XCTAssertEqual(
+            pieces(source, role: .codeMember),
+            [
+                "textStorage",
+                "length",
+                "textStorage",
+                "isVisible",
+                "applyTypingAttributes",
+                "refresh",
+                "highlight",
+            ]
+        )
+        XCTAssertTrue(pieces(source, role: .codeType).contains("NSAttributedString"))
+        XCTAssertTrue(pieces(source, role: .codeType).contains("String"))
+        XCTAssertFalse(pieces(source, role: .codeMember).contains("NSAttributedString"))
+        XCTAssertFalse(pieces(source, role: .codeMember).contains("greet"))
+        XCTAssertFalse(pieces(source, role: .codeMember).contains("declared"))
+        XCTAssertFalse(pieces(source, role: .codeMember).contains("string"))
+        XCTAssertFalse(pieces(source, role: .codeMember).contains("name"))
+        XCTAssertFalse(pieces(source, role: .codeMember).contains("ready"))
+        XCTAssertFalse(pieces(source, role: .codeMember).contains("count"))
+        XCTAssertTrue(pieces(source, role: .codeKeyword).contains("func"))
+        XCTAssertTrue(pieces(source, role: .codeKeyword).contains("if"))
+        XCTAssertTrue(pieces(source, role: .codeKeyword).contains("return"))
+        XCTAssertEqual(pieces(source, role: .codeNumber), ["42"])
+        XCTAssertTrue(pieces("```bash\necho(1)\n```", role: .codeMember).isEmpty)
     }
 
     func testJSONShellAndHTMLFences() {
@@ -132,6 +179,13 @@ final class FencedCodeTests: XCTestCase {
         XCTAssertTrue(html.contains("&quot;") || html.contains("class=\"code-string\""))
         XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(".code-keyword { color: var(--code-keyword); }"))
         XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(HighlightTheme.standard.color(for: .codeKeyword, isSyntax: false).light.cssHex))
+        let members = renderer.renderBody("```swift\nstorage.length\napplyTypingAttributes()\nfunc greet() {}\n```")
+        XCTAssertTrue(members.contains("<span class=\"code-member\">length</span>"))
+        XCTAssertTrue(members.contains("<span class=\"code-member\">applyTypingAttributes</span>"))
+        XCTAssertFalse(members.contains("<span class=\"code-member\">greet</span>"))
+        XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(".code-member { color: var(--code-member); }"))
+        XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(HighlightTheme.standard.color(for: .codeMember, isSyntax: false).light.cssHex))
+        XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(HighlightTheme.standard.color(for: .codeMember, isSyntax: false).dark.cssHex))
     }
 
     private func pieces(_ text: String, role: HighlightRole) -> [String] {

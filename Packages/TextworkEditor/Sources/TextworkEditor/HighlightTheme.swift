@@ -99,7 +99,11 @@ public struct HighlightRunStyle: Equatable, Sendable {
 /// Swift, JSON, shell, and HTML fences add keyword, string, number, comment,
 /// type, tag, and attribute colors from Xcode's Default (Light) and Default
 /// (Dark) themes. Tag names use the keyword color, which is how Xcode
-/// classifies an HTML tag. Plain code is that theme's plain text at 85 percent
+/// classifies an HTML tag. A Swift property or method name uses the project
+/// property and function color from those themes. That name is an identifier
+/// after a dot, or a name before a parenthesis. A name declared after `func`
+/// stays the plain code color. Keywords, capitalized types, and numbers keep
+/// their own colors. Plain code is that theme's plain text at 85 percent
 /// opacity, resolved on the editor background. Marker colors are a quieter
 /// tint of the same hue. Inline code sits on ``inlineCodeBackground``.
 ///
@@ -226,6 +230,13 @@ public struct HighlightTheme: Equatable, Sendable {
             syntaxLight: (0x8E, 0x70, 0x1D),
             syntaxDark: (0xAA, 0x79, 0x4E)
         )
+        // Xcode project properties and project function names, both this pair.
+        let codeMember = roleColors(
+            contentLight: (0x32, 0x6D, 0x74),
+            contentDark: (0x67, 0xB7, 0xA4),
+            syntaxLight: (0x46, 0x7C, 0x82),
+            syntaxDark: (0x56, 0x93, 0x85)
+        )
         let roles: [HighlightRole: HighlightRoleColors] = [
             .heading1: heading,
             .heading2: heading,
@@ -244,6 +255,7 @@ public struct HighlightTheme: Equatable, Sendable {
             .codeType: codeType,
             .codeTag: codeTag,
             .codeAttribute: codeAttribute,
+            .codeMember: codeMember,
             .link: link,
             .image: image,
             .listMarker: list,
@@ -303,7 +315,7 @@ public struct HighlightTheme: Equatable, Sendable {
                 fontTreatment: .monospaced,
                 underline: false
             )
-        case .codeBlock, .html, .codeKeyword, .codeString, .codeNumber, .codeComment, .codeType, .codeTag, .codeAttribute:
+        case .codeBlock, .html, .codeKeyword, .codeString, .codeNumber, .codeComment, .codeType, .codeTag, .codeAttribute, .codeMember:
             return HighlightRunStyle(foreground: foreground, background: nil, fontTreatment: .monospaced, underline: false)
         case .link, .image:
             return HighlightRunStyle(foreground: foreground, background: nil, fontTreatment: .body, underline: true)
@@ -328,6 +340,7 @@ public struct HighlightTheme: Equatable, Sendable {
             ("--code-type", color(for: .codeType, isSyntax: false)),
             ("--code-tag", color(for: .codeTag, isSyntax: false)),
             ("--code-attribute", color(for: .codeAttribute, isSyntax: false)),
+            ("--code-member", color(for: .codeMember, isSyntax: false)),
             ("--link", color(for: .link, isSyntax: false)),
             ("--quote", color(for: .blockQuote, isSyntax: false)),
             ("--quote-marker", color(for: .blockQuote, isSyntax: true)),

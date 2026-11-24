@@ -8,11 +8,13 @@ enum FencedCodeLanguage: Equatable, Sendable {
     case html
 }
 
-/// Carry block comments and multiline strings from one fence line to the next.
+/// Carry block comments, multiline strings, and a pending function name from one fence line to the next.
 struct FencedCodeScanState: Equatable, Sendable {
     var blockCommentDepth: Int = 0
     var insideMultilineString: Bool = false
     var insideHTMLComment: Bool = false
+    /// The next identifier is the name declared after `func`, so it stays plain.
+    var awaitingFunctionName: Bool = false
 }
 
 /// One colored token inside a fenced code line. Offsets are document bytes.
@@ -107,6 +109,7 @@ enum FencedCodeTokenizer {
         case .codeType: "code-type"
         case .codeTag: "code-tag"
         case .codeAttribute: "code-attribute"
+        case .codeMember: "code-member"
         default: nil
         }
     }
@@ -229,8 +232,19 @@ private func scanSwift(
             let word = String(decoding: bytes[start..<index], as: UTF8.self)
             if swiftKeywords.contains(word) {
                 appendToken(start..<index, role: .codeKeyword, into: &tokens)
+                if word == "func" {
+                    state.awaitingFunctionName = true
+                } else if state.awaitingFunctionName {
+                    state.awaitingFunctionName = false
+                }
             } else if byte >= 0x41 && byte <= 0x5A {
+                state.awaitingFunctionName = false
                 appendToken(start..<index, role: .codeType, into: &tokens)
+            } else if state.awaitingFunctionName {
+                state.awaitingFunctionName = false
+            } else if identifierFollowsDot(bytes, start: start, lineStart: range.lowerBound)
+                || identifierPrecedesParenthesis(bytes, end: index, limit: limit) {
+                appendToken(start..<index, role: .codeMember, into: &tokens)
             }
             continue
         }
@@ -537,6 +551,32 @@ private func isDigit(_ byte: UInt8) -> Bool { byte >= 0x30 && byte <= 0x39 }
 private func isHexDigit(_ byte: UInt8) -> Bool {
     isDigit(byte) || (byte >= 0x41 && byte <= 0x46) || (byte >= 0x61 && byte <= 0x66)
 }
+/// True when a dot, ignoring spaces and tabs, is the character before the identifier.
+private func identifierFollowsDot(_ bytes: [UInt8], start: Int, lineStart: Int) -> Bool {
+    var index = start
+    while index > lineStart {
+        index -= 1
+        let byte = bytes[index]
+        if byte == 0x20 || byte == 0x09 { continue }
+        return byte == 0x2E
+    }
+    return false
+}
+
+/// True when a parenthesis, ignoring spaces and tabs, follows the identifier.
+private func identifierPrecedesParenthesis(_ bytes: [UInt8], end: Int, limit: Int) -> Bool {
+    var index = end
+    while index < limit {
+        let byte = bytes[index]
+        if byte == 0x20 || byte == 0x09 {
+            index += 1
+            continue
+        }
+        return byte == 0x28
+    }
+    return false
+}
+
 private func isIdentifierStart(_ byte: UInt8) -> Bool {
     (byte >= 0x41 && byte <= 0x5A) || (byte >= 0x61 && byte <= 0x7A) || byte == 0x5F
 }
