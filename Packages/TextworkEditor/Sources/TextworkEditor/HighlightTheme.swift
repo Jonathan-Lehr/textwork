@@ -104,9 +104,11 @@ public struct HighlightRunStyle: Equatable, Sendable {
 /// classifies an HTML tag. A Swift property or method name uses the project
 /// property and function color from those themes. That name is an identifier
 /// after a dot, or a name before a parenthesis. A `let` or `var` name declared
-/// directly in a type body uses that same color. A local `let` or `var`,
-/// including `guard let` and `if let`, stays the plain code color, and so do
-/// later uses of that local name. A name declared after `func` stays the plain
+/// directly in a type body uses that same color, and so does a later bare use
+/// of that property inside the type. A local `let` or `var`, including `guard
+/// let` and `if let`, stays the plain code color, and so do later uses of that
+/// local name. A parameter with the same name hides the property in that inner
+/// scope. A name declared after `func` stays the plain
 /// code color. Keywords
 /// are bold. Capitalized project types keep the type color. Apple framework
 /// types and standard-library types use the system type color, and so do

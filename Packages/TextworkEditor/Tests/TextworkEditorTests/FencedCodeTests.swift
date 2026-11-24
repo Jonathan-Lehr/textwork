@@ -89,6 +89,7 @@ final class FencedCodeTests: XCTestCase {
             @Binding var text: String
             @MainActor @State var configuration: EditorConfiguration
             var stored: Int
+            var snapshot: Int
             var computed: Int {
                 let hidden = stored
                 return hidden
@@ -102,10 +103,15 @@ final class FencedCodeTests: XCTestCase {
                     value
                 }
                 configuration.count
+                snapshot = stored
                 let items = {
                     let inside = 1
                     return inside
                 }
+            }
+            func shadowed(configuration: EditorConfiguration) {
+                let text = configuration
+                text
             }
             init() {
                 let created = 1
@@ -128,10 +134,15 @@ final class FencedCodeTests: XCTestCase {
         XCTAssertEqual(
             pieces(source, role: .codeMember),
             [
-                "text", "configuration", "stored", "computed", "print", "count",
+                "text", "configuration", "stored", "snapshot", "computed", "stored", "text",
+                "print", "configuration", "count", "snapshot", "stored",
                 "item", "tag", "job", "extra", "count",
             ]
         )
+        let members = pieces(source, role: .codeMember)
+        XCTAssertEqual(members.filter { $0 == "configuration" }.count, 2)
+        XCTAssertEqual(members.filter { $0 == "text" }.count, 2)
+        XCTAssertEqual(members.filter { $0 == "snapshot" }.count, 2)
         for plainName in ["hidden", "highlighter", "local", "name", "value", "inside", "created", "outside", "read"] {
             XCTAssertFalse(pieces(source, role: .codeMember).contains(plainName), plainName)
         }
