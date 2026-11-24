@@ -35,6 +35,23 @@ final class FencedCodeTests: XCTestCase {
         XCTAssertTrue(pieces(source, role: .codeMember).isEmpty)
     }
 
+    func testJSONEncoderIsASystemType() {
+        let source = """
+        ```swift
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+        let list = PropertyListEncoder()
+        ```
+        """
+        XCTAssertEqual(
+            pieces(source, role: .codeSystemType),
+            ["JSONEncoder", "JSONDecoder", "PropertyListEncoder"]
+        )
+        XCTAssertFalse(pieces(source, role: .codeType).contains("JSONEncoder"))
+        XCTAssertFalse(pieces(source, role: .codeOtherMember).contains("JSONEncoder"))
+        XCTAssertFalse(pieces(source, role: .codeMember).contains("encoder"))
+    }
+
     func testSwiftPropertiesAndMethodsUseTheMemberColor() {
         let source = """
         ```swift

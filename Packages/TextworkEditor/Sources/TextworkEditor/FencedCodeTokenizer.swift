@@ -793,13 +793,49 @@ private let appleFrameworkPrefixes: [String] = [
 ].sorted { $0.count > $1.count }
 
 private let swiftSystemTypeNames: Set<String> = [
-    "String", "Int", "UInt", "Int8", "Int16", "Int32", "Int64",
-    "UInt8", "UInt16", "UInt32", "UInt64", "Double", "Float", "Bool",
-    "Character", "Array", "Dictionary", "Set", "Optional", "Result",
-    "Error", "Never", "Void", "Any", "AnyObject", "Data", "Date", "URL",
-    "UUID", "Binding", "State", "View", "Text", "Color", "Image",
-    "Published", "ObservableObject", "MainActor", "Task", "Codable",
-    "Equatable", "Hashable", "Observable", "ObservedObject", "StateObject",
+    // Swift standard library
+    "String", "Substring", "Character", "Unicode",
+    "Int", "UInt", "Int8", "Int16", "Int32", "Int64",
+    "UInt8", "UInt16", "UInt32", "UInt64",
+    "Double", "Float", "Float16", "Float32", "Float64", "Bool",
+    "Array", "ArraySlice", "Dictionary", "Set", "Optional", "Result",
+    "Error", "LocalizedError", "Never", "Void", "Any", "AnyObject",
+    "Codable", "Encodable", "Decodable", "CodingKey", "Encoder", "Decoder",
+    "Equatable", "Hashable", "Comparable", "Identifiable", "Sendable",
+    "Sequence", "Collection", "IteratorProtocol", "OptionSet", "CaseIterable",
+    "RawRepresentable", "CustomStringConvertible", "CustomDebugStringConvertible",
+    "Range", "ClosedRange", "PartialRangeFrom", "PartialRangeThrough", "PartialRangeUpTo",
+    "KeyPath", "WritableKeyPath", "ReferenceWritableKeyPath", "PartialKeyPath", "AnyKeyPath",
+    "Regex", "Task", "MainActor", "Actor", "UnsafePointer", "UnsafeMutablePointer",
+    "UnsafeRawPointer", "UnsafeMutableRawPointer", "ObjectIdentifier", "Mirror",
+    // Foundation
+    "Data", "Date", "DateComponents", "DateInterval", "URL", "URLRequest", "URLResponse",
+    "HTTPURLResponse", "URLSession", "URLComponents", "URLQueryItem", "UUID",
+    "Decimal", "Locale", "Calendar", "TimeZone", "DateFormatter", "NumberFormatter",
+    "ISO8601DateFormatter", "ByteCountFormatter", "Measurement", "MeasurementFormatter",
+    "IndexPath", "IndexSet", "CharacterSet", "AttributedString", "Notification",
+    "NotificationCenter", "Bundle", "FileManager", "FileHandle", "UserDefaults",
+    "JSONEncoder", "JSONDecoder", "JSONSerialization",
+    "PropertyListEncoder", "PropertyListDecoder", "PropertyListSerialization",
+    "Scanner", "Formatter", "Progress", "Operation", "OperationQueue", "Timer",
+    "RunLoop", "Thread", "Process", "Pipe", "InputStream", "OutputStream",
+    "DispatchQueue", "DispatchGroup", "DispatchWorkItem",
+    // SwiftUI
+    "View", "Text", "Button", "Color", "Font", "Image", "Label", "Link",
+    "VStack", "HStack", "ZStack", "LazyVStack", "LazyHStack", "LazyVGrid", "LazyHGrid",
+    "List", "ForEach", "Section", "Form", "Group", "ScrollView", "Grid",
+    "NavigationStack", "NavigationSplitView", "NavigationLink", "TabView",
+    "Spacer", "Divider", "Toggle", "Picker", "Slider", "Stepper",
+    "TextField", "SecureField", "ProgressView", "Menu",
+    "State", "Binding", "Environment", "EnvironmentObject",
+    "ObservedObject", "StateObject", "FocusState", "AppStorage", "SceneStorage",
+    "App", "Scene", "WindowGroup", "Preview",
+    "Shape", "Path", "Circle", "Rectangle", "RoundedRectangle", "Capsule", "Ellipse",
+    "Alignment", "Angle", "Animation", "Axis", "Edge", "UnitPoint",
+    // Combine and Observation
+    "Publisher", "Subscriber", "Subscription", "Cancellable", "AnyCancellable",
+    "AnyPublisher", "Future", "Just", "Deferred", "PassthroughSubject", "CurrentValueSubject",
+    "Published", "ObservableObject", "Observable", "Bindable",
 ]
 
 /// True when a dot, ignoring spaces and tabs, is the character before the identifier.
