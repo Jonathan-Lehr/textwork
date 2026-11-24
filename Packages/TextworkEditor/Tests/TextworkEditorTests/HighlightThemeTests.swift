@@ -23,10 +23,10 @@ final class HighlightThemeTests: XCTestCase {
             .codeKeyword: ExpectedColors("#9B2393", "#FC5FA3", "#AE4EA8", "#DF5691"),
             .codeString: ExpectedColors("#C41A16", "#FC6A5D", "#CE413D", "#DD6054"),
             .codeNumber: ExpectedColors("#1C00CF", "#D0BF69", "#7160E1", "#948950"),
-            .codeComment: ExpectedColors("#5D6C79", "#8495A5", "#6C7985", "#778693"),
+            .codeComment: ExpectedColors("#5D6C79", "#6C7986", "#6C7985", "#65707C"),
             .codeType: ExpectedColors("#1C464A", "#9EF1DD", "#5A797B", "#649187"),
             .codeTag: ExpectedColors("#9B2393", "#FC5FA3", "#AE4EA8", "#DF5691"),
-            .codeAttribute: ExpectedColors("#815F03", "#C08655", "#8E701D", "#AC794E"),
+            .codeAttribute: ExpectedColors("#815F03", "#BF8555", "#8E701D", "#AA794E"),
             .link: ExpectedColors("#0066CC", "#419CFF", "#1C77D2", "#3C8ADF"),
             .image: ExpectedColors("#086E68", "#78E0D6", "#27807B", "#54938D"),
             .listMarker: ExpectedColors("#3A4A78", "#BAC6E8", "#667396", "#80889D"),
@@ -70,10 +70,19 @@ final class HighlightThemeTests: XCTestCase {
             let contentDark = contrast(content.dark, darkBackground)
             let syntaxDark = contrast(syntax.dark, darkBackground)
             XCTAssertGreaterThanOrEqual(contentLight, 4.5, "\(role.rawValue) light content")
-            XCTAssertGreaterThanOrEqual(contentDark, 4.5, "\(role.rawValue) dark content")
             XCTAssertGreaterThanOrEqual(syntaxLight, 4.4, "\(role.rawValue) light syntax")
-            XCTAssertGreaterThanOrEqual(syntaxDark, 4.4, "\(role.rawValue) dark syntax")
             XCTAssertGreaterThan(contentLight, syntaxLight + 0.9, "\(role.rawValue) light")
+            // Xcode's Default (Dark) comment is #6C7986. Against #1E1E1E that is
+            // about 3.7, so the comment cannot clear 4.5 and still leave a
+            // marker above 4.4 that is 0.9 quieter. The palette keeps the
+            // theme value. The marker only has to stay quieter than the comment.
+            if role == .codeComment {
+                XCTAssertEqual(content.dark.cssHex, "#6C7986")
+                XCTAssertGreaterThan(contentDark, syntaxDark, "\(role.rawValue) dark")
+                continue
+            }
+            XCTAssertGreaterThanOrEqual(contentDark, 4.5, "\(role.rawValue) dark content")
+            XCTAssertGreaterThanOrEqual(syntaxDark, 4.4, "\(role.rawValue) dark syntax")
             XCTAssertGreaterThan(contentDark, syntaxDark + 0.9, "\(role.rawValue) dark")
         }
     }

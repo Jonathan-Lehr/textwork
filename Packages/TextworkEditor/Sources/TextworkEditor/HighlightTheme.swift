@@ -201,12 +201,12 @@ public struct HighlightTheme: Equatable, Sendable {
             syntaxLight: (0x71, 0x60, 0xE1),
             syntaxDark: (0x94, 0x89, 0x50)
         )
-        // Xcode's dark comment is #6C7986. Lightened so its quieter marker still clears contrast.
+        // Exact Xcode Default (Dark) comment. On #1E1E1E its contrast is about 3.7.
         let codeComment = roleColors(
             contentLight: (0x5D, 0x6C, 0x79),
-            contentDark: (0x84, 0x95, 0xA5),
+            contentDark: (0x6C, 0x79, 0x86),
             syntaxLight: (0x6C, 0x79, 0x85),
-            syntaxDark: (0x77, 0x86, 0x93)
+            syntaxDark: (0x65, 0x70, 0x7C)
         )
         let codeType = roleColors(
             contentLight: (0x1C, 0x46, 0x4A),
@@ -220,12 +220,11 @@ public struct HighlightTheme: Equatable, Sendable {
             syntaxLight: (0xAE, 0x4E, 0xA8),
             syntaxDark: (0xDF, 0x56, 0x91)
         )
-        // Xcode's dark attribute is #BF8555. Lightened by one step so its quieter marker still clears contrast.
         let codeAttribute = roleColors(
             contentLight: (0x81, 0x5F, 0x03),
-            contentDark: (0xC0, 0x86, 0x55),
+            contentDark: (0xBF, 0x85, 0x55),
             syntaxLight: (0x8E, 0x70, 0x1D),
-            syntaxDark: (0xAC, 0x79, 0x4E)
+            syntaxDark: (0xAA, 0x79, 0x4E)
         )
         let roles: [HighlightRole: HighlightRoleColors] = [
             .heading1: heading,
