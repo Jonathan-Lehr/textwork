@@ -118,8 +118,8 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				BB0000000000000000000003 /* TextworkTests */,
 				AA00000000000000000000F3 /* App */,
+				BB0000000000000000000003 /* TextworkTests */,
 			);
 			name = TextworkTests;
 			packageProductDependencies = (
