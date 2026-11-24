@@ -34,6 +34,7 @@ struct FencedCodeScanState: Equatable, Sendable {
 struct SwiftBraceScope: Equatable, Sendable {
     var kind: SwiftBraceKind
     var propertyNames: Set<String> = []
+    var functionNames: Set<String> = []
     var localNames: Set<String> = []
     /// A closure may still be listing parameters before `in`.
     var closureParametersPossible: Bool = false
@@ -138,6 +139,7 @@ enum FencedCodeTokenizer {
         case .codeTag: "code-tag"
         case .codeAttribute: "code-attribute"
         case .codeMember: "code-member"
+        case .codeOtherMember: "code-other-member"
         case .codeSystemType: "code-system-type"
         default: nil
         }
@@ -291,6 +293,9 @@ private func scanSwift(
                 state.awaitingFunctionName = false
                 state.awaitingPropertyName = false
                 state.awaitingLocalName = false
+                if state.scopes.last?.kind == .typeBody {
+                    recordFunction(word, state: &state)
+                }
             } else if state.awaitingPropertyName {
                 state.awaitingPropertyName = false
                 recordProperty(word, state: &state)
@@ -307,13 +312,15 @@ private func scanSwift(
             } else if byte >= 0x41 && byte <= 0x5A {
                 appendToken(start..<index, role: .codeType, into: &tokens)
             } else if followsDot {
-                appendToken(start..<index, role: .codeMember, into: &tokens)
+                let role: HighlightRole = declaredTypeMember(word, state: state) ? .codeMember : .codeOtherMember
+                appendToken(start..<index, role: role, into: &tokens)
             } else if localNameShadowsProperty(word, state: state) {
                 // A local or parameter hides the property, so this use stays plain.
             } else if barePropertyReference(word, state: state) {
                 appendToken(start..<index, role: .codeMember, into: &tokens)
             } else if identifierPrecedesParenthesis(bytes, end: index, limit: limit) {
-                appendToken(start..<index, role: .codeMember, into: &tokens)
+                let role: HighlightRole = declaredTypeFunction(word, state: state) ? .codeMember : .codeOtherMember
+                appendToken(start..<index, role: role, into: &tokens)
             }
             continue
         }
@@ -686,6 +693,22 @@ private func closeSwiftBrace(_ state: inout FencedCodeScanState) {
 private func recordProperty(_ name: String, state: inout FencedCodeScanState) {
     guard let index = state.scopes.lastIndex(where: { $0.kind == .typeBody }) else { return }
     state.scopes[index].propertyNames.insert(name)
+}
+
+private func recordFunction(_ name: String, state: inout FencedCodeScanState) {
+    guard let index = state.scopes.lastIndex(where: { $0.kind == .typeBody }) else { return }
+    state.scopes[index].functionNames.insert(name)
+}
+
+/// A name declared with `let`, `var`, or `func` on the enclosing type.
+private func declaredTypeMember(_ name: String, state: FencedCodeScanState) -> Bool {
+    guard let scope = state.scopes.last(where: { $0.kind == .typeBody }) else { return false }
+    return scope.propertyNames.contains(name) || scope.functionNames.contains(name)
+}
+
+private func declaredTypeFunction(_ name: String, state: FencedCodeScanState) -> Bool {
+    guard let scope = state.scopes.last(where: { $0.kind == .typeBody }) else { return false }
+    return scope.functionNames.contains(name)
 }
 
 private func recordLocal(_ name: String, state: inout FencedCodeScanState) {

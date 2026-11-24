@@ -28,6 +28,7 @@ final class HighlightThemeTests: XCTestCase {
             .codeTag: ExpectedColors("#9B2393", "#FC5FA3", "#AE4EA8", "#DF5691"),
             .codeAttribute: ExpectedColors("#3900A0", "#D0A8FF", "#8460C4", "#987CB8"),
             .codeMember: ExpectedColors("#326D74", "#67B7A4", "#467C82", "#569385"),
+            .codeOtherMember: ExpectedColors("#6C36A9", "#A167E6", "#8A60BB", "#9761D7"),
             .codeSystemType: ExpectedColors("#3900A0", "#D0A8FF", "#8460C4", "#987CB8"),
             .link: ExpectedColors("#0066CC", "#419CFF", "#1C77D2", "#3C8ADF"),
             .image: ExpectedColors("#086E68", "#78E0D6", "#27807B", "#54938D"),
@@ -74,12 +75,14 @@ final class HighlightThemeTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(contentLight, 4.5, "\(role.rawValue) light content")
             XCTAssertGreaterThanOrEqual(syntaxLight, 4.4, "\(role.rawValue) light syntax")
             XCTAssertGreaterThan(contentLight, syntaxLight + 0.9, "\(role.rawValue) light")
-            // Xcode's Default (Dark) comment is #6C7986. Against #1E1E1E that is
-            // about 3.7, so the comment cannot clear 4.5 and still leave a
-            // marker above 4.4 that is 0.9 quieter. The palette keeps the
-            // theme value. The marker only has to stay quieter than the comment.
-            if role == .codeComment {
-                XCTAssertEqual(content.dark.cssHex, "#6C7986")
+            // Two Default (Dark) values sit too close to #1E1E1E to clear 4.5
+            // and still leave a marker above 4.4 that is 0.9 quieter. Comments
+            // are #6C7986 (about 3.7). Other properties and functions are
+            // #A167E6 (about 4.44). The palette keeps those theme values. The
+            // marker only has to stay quieter than the content.
+            if role == .codeComment || role == .codeOtherMember {
+                let exactDark = role == .codeComment ? "#6C7986" : "#A167E6"
+                XCTAssertEqual(content.dark.cssHex, exactDark, role.rawValue)
                 XCTAssertGreaterThan(contentDark, syntaxDark, "\(role.rawValue) dark")
                 continue
             }
@@ -534,7 +537,7 @@ final class HighlightThemeTests: XCTestCase {
             case .html:
                 font = mono
                 storage.addAttribute(.foregroundColor, value: NSColor.systemTeal, range: range)
-            case .table, .listMarker, .blockQuote, .thematicBreak, .codeKeyword, .codeString, .codeNumber, .codeComment, .codeType, .codeTag, .codeAttribute, .codeMember, .codeSystemType:
+            case .table, .listMarker, .blockQuote, .thematicBreak, .codeKeyword, .codeString, .codeNumber, .codeComment, .codeType, .codeTag, .codeAttribute, .codeMember, .codeOtherMember, .codeSystemType:
                 break
             }
             storage.addAttribute(.font, value: font, range: range)

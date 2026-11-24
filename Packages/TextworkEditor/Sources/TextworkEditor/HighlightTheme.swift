@@ -101,16 +101,16 @@ public struct HighlightRunStyle: Equatable, Sendable {
 /// Swift, JSON, shell, and HTML fences add keyword, string, number, comment,
 /// type, tag, and attribute colors from Xcode's Default (Light) and Default
 /// (Dark) themes. Tag names use the keyword color, which is how Xcode
-/// classifies an HTML tag. A Swift property or method name uses the project
-/// property and function color from those themes. That name is an identifier
-/// after a dot, or a name before a parenthesis. A `let` or `var` name declared
-/// directly in a type body uses that same color, and so does a later bare use
-/// of that property inside the type. A local `let` or `var`, including `guard
-/// let` and `if let`, stays the plain code color, and so do later uses of that
-/// local name. A parameter with the same name hides the property in that inner
-/// scope. A name declared after `func` stays the plain
-/// code color. Keywords
-/// are bold. Capitalized project types keep the type color. Apple framework
+/// classifies an HTML tag. A property or method the surrounding type did not
+/// declare uses Xcode's other property and function color. That is a name
+/// after a dot, or a call of an unknown name. A `let` or `var` declared in a
+/// type body, a later bare use of that property, and a call of a `func`
+/// declared there use the project property color. A local `let` or `var`,
+/// including `guard let` and `if let`, stays the plain code color, and so do
+/// later uses of that local name. A parameter with the same name hides the
+/// property in that inner scope. A name declared after `func` stays the plain
+/// code color. Keywords are bold. Capitalized project types keep the type
+/// color. Apple framework
 /// types and standard-library types use the system type color, and so do
 /// attributes such as `@State`. Numbers keep their own color. Plain code is
 /// that theme's plain text at 85 percent
@@ -243,6 +243,14 @@ public struct HighlightTheme: Equatable, Sendable {
             syntaxDark: (0x98, 0x7C, 0xB8)
         )
         let codeAttribute = codeSystemType
+        // Xcode other properties and other function names (`identifier.*.system`).
+        // Dark is about 4.44 against #1E1E1E, so its marker cannot clear the usual floor.
+        let codeOtherMember = roleColors(
+            contentLight: (0x6C, 0x36, 0xA9),
+            contentDark: (0xA1, 0x67, 0xE6),
+            syntaxLight: (0x8A, 0x60, 0xBB),
+            syntaxDark: (0x97, 0x61, 0xD7)
+        )
         // Xcode project properties, project constants, and project function names.
         let codeMember = roleColors(
             contentLight: (0x32, 0x6D, 0x74),
@@ -269,6 +277,7 @@ public struct HighlightTheme: Equatable, Sendable {
             .codeTag: codeTag,
             .codeAttribute: codeAttribute,
             .codeMember: codeMember,
+            .codeOtherMember: codeOtherMember,
             .codeSystemType: codeSystemType,
             .link: link,
             .image: image,
@@ -331,7 +340,7 @@ public struct HighlightTheme: Equatable, Sendable {
             )
         case .codeKeyword:
             return HighlightRunStyle(foreground: foreground, background: nil, fontTreatment: .boldMonospaced, underline: false)
-        case .codeBlock, .html, .codeString, .codeNumber, .codeComment, .codeType, .codeTag, .codeAttribute, .codeMember, .codeSystemType:
+        case .codeBlock, .html, .codeString, .codeNumber, .codeComment, .codeType, .codeTag, .codeAttribute, .codeMember, .codeOtherMember, .codeSystemType:
             return HighlightRunStyle(foreground: foreground, background: nil, fontTreatment: .monospaced, underline: false)
         case .link, .image:
             return HighlightRunStyle(foreground: foreground, background: nil, fontTreatment: .body, underline: true)
@@ -357,6 +366,7 @@ public struct HighlightTheme: Equatable, Sendable {
             ("--code-tag", color(for: .codeTag, isSyntax: false)),
             ("--code-attribute", color(for: .codeAttribute, isSyntax: false)),
             ("--code-member", color(for: .codeMember, isSyntax: false)),
+            ("--code-other-member", color(for: .codeOtherMember, isSyntax: false)),
             ("--code-system-type", color(for: .codeSystemType, isSyntax: false)),
             ("--link", color(for: .link, isSyntax: false)),
             ("--quote", color(for: .blockQuote, isSyntax: false)),

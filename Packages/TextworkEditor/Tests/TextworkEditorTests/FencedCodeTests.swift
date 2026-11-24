@@ -54,7 +54,7 @@ final class FencedCodeTests: XCTestCase {
         ```
         """
         XCTAssertEqual(
-            pieces(source, role: .codeMember),
+            pieces(source, role: .codeOtherMember),
             [
                 "textStorage",
                 "length",
@@ -65,6 +65,7 @@ final class FencedCodeTests: XCTestCase {
                 "highlight",
             ]
         )
+        XCTAssertTrue(pieces(source, role: .codeMember).isEmpty)
         XCTAssertTrue(pieces(source, role: .codeSystemType).contains("NSAttributedString"))
         XCTAssertTrue(pieces(source, role: .codeSystemType).contains("String"))
         XCTAssertFalse(pieces(source, role: .codeType).contains("NSAttributedString"))
@@ -104,6 +105,8 @@ final class FencedCodeTests: XCTestCase {
                 }
                 configuration.count
                 snapshot = stored
+                read()
+                self.stored
                 let items = {
                     let inside = 1
                     return inside
@@ -135,15 +138,17 @@ final class FencedCodeTests: XCTestCase {
             pieces(source, role: .codeMember),
             [
                 "text", "configuration", "stored", "snapshot", "computed", "stored", "text",
-                "print", "configuration", "count", "snapshot", "stored",
+                "configuration", "snapshot", "stored", "read", "stored",
                 "item", "tag", "job", "extra", "count",
             ]
         )
+        XCTAssertTrue(pieces(source, role: .codeOtherMember).contains("print"))
+        XCTAssertTrue(pieces(source, role: .codeOtherMember).contains("count"))
         let members = pieces(source, role: .codeMember)
         XCTAssertEqual(members.filter { $0 == "configuration" }.count, 2)
         XCTAssertEqual(members.filter { $0 == "text" }.count, 2)
         XCTAssertEqual(members.filter { $0 == "snapshot" }.count, 2)
-        for plainName in ["hidden", "highlighter", "local", "name", "value", "inside", "created", "outside", "read"] {
+        for plainName in ["hidden", "highlighter", "local", "name", "value", "inside", "created", "outside"] {
             XCTAssertFalse(pieces(source, role: .codeMember).contains(plainName), plainName)
         }
         XCTAssertTrue(pieces(source, role: .codeSystemType).contains("String"))
@@ -259,9 +264,10 @@ final class FencedCodeTests: XCTestCase {
         XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(".code-keyword { color: var(--code-keyword); font-weight: bold; }"))
         XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(HighlightTheme.standard.color(for: .codeKeyword, isSyntax: false).light.cssHex))
         let members = renderer.renderBody("```swift\nstorage.length\napplyTypingAttributes()\nfunc greet() {}\n```")
-        XCTAssertTrue(members.contains("<span class=\"code-member\">length</span>"))
-        XCTAssertTrue(members.contains("<span class=\"code-member\">applyTypingAttributes</span>"))
+        XCTAssertTrue(members.contains("<span class=\"code-other-member\">length</span>"))
+        XCTAssertTrue(members.contains("<span class=\"code-other-member\">applyTypingAttributes</span>"))
         XCTAssertFalse(members.contains("<span class=\"code-member\">greet</span>"))
+        XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(".code-other-member { color: var(--code-other-member); }"))
         XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(".code-member { color: var(--code-member); }"))
         XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(HighlightTheme.standard.color(for: .codeMember, isSyntax: false).light.cssHex))
         XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(HighlightTheme.standard.color(for: .codeMember, isSyntax: false).dark.cssHex))

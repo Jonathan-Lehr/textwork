@@ -22,8 +22,10 @@ public enum HighlightRole: String, Codable, Sendable, Equatable, CaseIterable {
     case codeType
     case codeTag
     case codeAttribute
-    /// A property or method name inside a fenced code block.
+    /// A property or method declared in the surrounding type.
     case codeMember
+    /// A property or method that is not declared in the surrounding type.
+    case codeOtherMember
     /// An Apple or Swift standard-library type name.
     case codeSystemType
     case link
