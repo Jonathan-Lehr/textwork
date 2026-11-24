@@ -15,16 +15,20 @@ struct FencedCodeScanState: Equatable, Sendable {
     var insideHTMLComment: Bool = false
     /// The next identifier is the name declared after `func`, so it stays plain.
     var awaitingFunctionName: Bool = false
-    /// The next identifier is a name introduced by `let` or `var`.
-    var awaitingBindingName: Bool = false
-    /// An `if` or `while` introduced the binding, so the name belongs to the next brace block.
-    var bindingEntersNextBlock: Bool = false
-    /// The previous keyword was `if` or `while`.
-    var conditionalIntroducer: Bool = false
-    /// Names visible in the current brace block and its parents. The first set is the fence.
-    var bindingScopes: [Set<String>] = [Set()]
-    /// Names declared by `if let` or `while let`, installed when the next `{` opens.
-    var bindingsForNextBlock: Set<String> = []
+    /// The next identifier is a `let` or `var` property in a type body.
+    var awaitingPropertyName: Bool = false
+    /// The next `{` opens a class, struct, enum, actor, extension, or protocol body.
+    var nextBraceOpensTypeBody: Bool = false
+    /// The next `{` opens a function, initializer, closure, or accessor body.
+    var nextBraceOpensFunctionBody: Bool = false
+    /// Outermost first. A type body is where `let` and `var` names are properties.
+    var braceKinds: [SwiftBraceKind] = []
+}
+
+/// Whether a `{` block is a type declaration or a nested body of code.
+enum SwiftBraceKind: Equatable, Sendable {
+    case typeBody
+    case functionBody
 }
 
 /// One colored token inside a fenced code line. Offsets are document bytes.
@@ -120,7 +124,6 @@ enum FencedCodeTokenizer {
         case .codeTag: "code-tag"
         case .codeAttribute: "code-attribute"
         case .codeMember: "code-member"
-        case .codeVariable: "code-variable"
         case .codeSystemType: "code-system-type"
         default: nil
         }
@@ -235,17 +238,18 @@ private func scanSwift(
             continue
         }
         if byte == 0x7B {
-            openBindingScope(&state)
+            openSwiftBrace(&state)
             index += 1
             continue
         }
         if byte == 0x7D {
-            closeBindingScope(&state)
+            closeSwiftBrace(&state)
             index += 1
             continue
         }
         if isDigit(byte) {
             index = consumeNumber(bytes, from: index, limit: limit, into: &tokens)
+            state.awaitingPropertyName = false
             continue
         }
         if isIdentifierStart(byte) {
@@ -257,32 +261,22 @@ private func scanSwift(
                 noteSwiftKeyword(word, state: &state)
             } else if state.awaitingFunctionName {
                 state.awaitingFunctionName = false
-                state.conditionalIntroducer = false
-            } else if state.awaitingBindingName {
-                state.awaitingBindingName = false
-                recordBinding(word, state: &state)
-                if !state.bindingEntersNextBlock {
-                    state.conditionalIntroducer = false
-                }
-                appendToken(start..<index, role: .codeVariable, into: &tokens)
-            } else if bindingIsVisible(word, state: state),
-                      !identifierFollowsDot(bytes, start: start, lineStart: range.lowerBound) {
-                state.conditionalIntroducer = false
-                appendToken(start..<index, role: .codeVariable, into: &tokens)
+                state.awaitingPropertyName = false
+            } else if state.awaitingPropertyName {
+                state.awaitingPropertyName = false
+                appendToken(start..<index, role: .codeMember, into: &tokens)
             } else if isSystemTypeName(word) {
-                state.conditionalIntroducer = false
                 appendToken(start..<index, role: .codeSystemType, into: &tokens)
             } else if byte >= 0x41 && byte <= 0x5A {
-                state.conditionalIntroducer = false
                 appendToken(start..<index, role: .codeType, into: &tokens)
             } else if identifierFollowsDot(bytes, start: start, lineStart: range.lowerBound)
                 || identifierPrecedesParenthesis(bytes, end: index, limit: limit) {
-                state.conditionalIntroducer = false
                 appendToken(start..<index, role: .codeMember, into: &tokens)
-            } else {
-                state.conditionalIntroducer = false
             }
             continue
+        }
+        if byte != 0x20 && byte != 0x09 && byte != 0x0A && byte != 0x0D {
+            state.awaitingPropertyName = false
         }
         index += DocumentBuffer.scalarWidth(bytes, index).0
     }
@@ -588,55 +582,43 @@ private func isHexDigit(_ byte: UInt8) -> Bool {
     isDigit(byte) || (byte >= 0x41 && byte <= 0x46) || (byte >= 0x61 && byte <= 0x66)
 }
 private func noteSwiftKeyword(_ word: String, state: inout FencedCodeScanState) {
-    if word == "func" {
-        state.awaitingFunctionName = true
-        state.awaitingBindingName = false
-        state.conditionalIntroducer = false
-    } else if word == "let" || word == "var" {
-        state.awaitingBindingName = true
-        state.bindingEntersNextBlock = state.conditionalIntroducer
+    switch word {
+    case "func", "init", "subscript", "deinit", "get", "set", "willSet", "didSet":
+        state.awaitingFunctionName = word == "func"
+        state.awaitingPropertyName = false
+        state.nextBraceOpensFunctionBody = true
+        state.nextBraceOpensTypeBody = false
+    case "class", "struct", "enum", "actor", "extension", "protocol":
         state.awaitingFunctionName = false
-    } else if word == "if" || word == "while" {
-        state.conditionalIntroducer = true
+        state.awaitingPropertyName = false
+        state.nextBraceOpensTypeBody = true
+        state.nextBraceOpensFunctionBody = false
+    case "let", "var":
         state.awaitingFunctionName = false
-        state.awaitingBindingName = false
-    } else if word == "guard" {
-        state.conditionalIntroducer = false
+        state.awaitingPropertyName = state.braceKinds.last == .typeBody
+    default:
         state.awaitingFunctionName = false
-        state.awaitingBindingName = false
+        state.awaitingPropertyName = false
+    }
+}
+
+private func openSwiftBrace(_ state: inout FencedCodeScanState) {
+    if state.nextBraceOpensTypeBody {
+        state.braceKinds.append(.typeBody)
     } else {
-        state.conditionalIntroducer = false
-        state.awaitingFunctionName = false
-        state.awaitingBindingName = false
+        state.braceKinds.append(.functionBody)
     }
+    state.nextBraceOpensTypeBody = false
+    state.nextBraceOpensFunctionBody = false
+    state.awaitingFunctionName = false
+    state.awaitingPropertyName = false
 }
 
-private func recordBinding(_ name: String, state: inout FencedCodeScanState) {
-    if state.bindingEntersNextBlock {
-        state.bindingsForNextBlock.insert(name)
-    } else if state.bindingScopes.isEmpty {
-        state.bindingScopes = [[name]]
-    } else {
-        let last = state.bindingScopes.count - 1
-        state.bindingScopes[last].insert(name)
+private func closeSwiftBrace(_ state: inout FencedCodeScanState) {
+    if !state.braceKinds.isEmpty {
+        state.braceKinds.removeLast()
     }
-}
-
-private func bindingIsVisible(_ name: String, state: FencedCodeScanState) -> Bool {
-    state.bindingScopes.contains { $0.contains(name) }
-}
-
-private func openBindingScope(_ state: inout FencedCodeScanState) {
-    state.bindingScopes.append(state.bindingsForNextBlock)
-    state.bindingsForNextBlock = []
-    state.conditionalIntroducer = false
-    state.bindingEntersNextBlock = false
-}
-
-private func closeBindingScope(_ state: inout FencedCodeScanState) {
-    if state.bindingScopes.count > 1 {
-        state.bindingScopes.removeLast()
-    }
+    state.awaitingPropertyName = false
 }
 
 private func isSystemTypeName(_ word: String) -> Bool {

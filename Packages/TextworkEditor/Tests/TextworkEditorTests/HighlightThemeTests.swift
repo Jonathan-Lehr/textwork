@@ -28,7 +28,6 @@ final class HighlightThemeTests: XCTestCase {
             .codeTag: ExpectedColors("#9B2393", "#FC5FA3", "#AE4EA8", "#DF5691"),
             .codeAttribute: ExpectedColors("#3900A0", "#D0A8FF", "#8460C4", "#987CB8"),
             .codeMember: ExpectedColors("#326D74", "#67B7A4", "#467C82", "#569385"),
-            .codeVariable: ExpectedColors("#326D74", "#67B7A4", "#467C82", "#569385"),
             .codeSystemType: ExpectedColors("#3900A0", "#D0A8FF", "#8460C4", "#987CB8"),
             .link: ExpectedColors("#0066CC", "#419CFF", "#1C77D2", "#3C8ADF"),
             .image: ExpectedColors("#086E68", "#78E0D6", "#27807B", "#54938D"),
@@ -535,7 +534,7 @@ final class HighlightThemeTests: XCTestCase {
             case .html:
                 font = mono
                 storage.addAttribute(.foregroundColor, value: NSColor.systemTeal, range: range)
-            case .table, .listMarker, .blockQuote, .thematicBreak, .codeKeyword, .codeString, .codeNumber, .codeComment, .codeType, .codeTag, .codeAttribute, .codeMember, .codeVariable, .codeSystemType:
+            case .table, .listMarker, .blockQuote, .thematicBreak, .codeKeyword, .codeString, .codeNumber, .codeComment, .codeType, .codeTag, .codeAttribute, .codeMember, .codeSystemType:
                 break
             }
             storage.addAttribute(.font, value: font, range: range)

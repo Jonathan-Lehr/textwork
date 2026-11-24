@@ -82,23 +82,41 @@ final class FencedCodeTests: XCTestCase {
         XCTAssertTrue(pieces("```bash\necho(1)\n```", role: .codeMember).isEmpty)
     }
 
-    func testSwiftBindingsAndSystemTypes() {
+    func testSwiftPropertiesStayTealAndLocalsStayPlain() {
         let source = """
         ```swift
-        @Binding var text: String
-        @MainActor @State var configuration: EditorConfiguration
-        let highlighter = MarkdownHighlighter()
-        let count = text.count
-        guard let name = text else { return }
-        print(name)
-        if let value = name {
-            value
-        }
-        name
         struct Sample {
+            @Binding var text: String
+            @MainActor @State var configuration: EditorConfiguration
             var stored: Int
-            func read() { stored }
+            var computed: Int {
+                let hidden = stored
+                return hidden
+            }
+            func read() {
+                let highlighter = text
+                var local = highlighter
+                guard let name = local else { return }
+                print(name)
+                if let value = name {
+                    value
+                }
+                configuration.count
+                let items = {
+                    let inside = 1
+                    return inside
+                }
+            }
+            init() {
+                let created = 1
+                created
+            }
         }
+        class Box { let item = 1 }
+        enum Choice { let tag = 1 }
+        actor Worker { var job = 1 }
+        extension Sample { var extra = 1 }
+        protocol Listing { var count: Int { get } }
         let outside = NSView()
         UIView.self
         ```
@@ -108,27 +126,24 @@ final class FencedCodeTests: XCTestCase {
             ["@Binding", "@MainActor", "@State"]
         )
         XCTAssertEqual(
-            pieces(source, role: .codeVariable),
+            pieces(source, role: .codeMember),
             [
-                "text", "configuration", "highlighter", "count", "text", "name", "text",
-                "name", "value", "name", "value", "name", "stored", "stored", "outside",
+                "text", "configuration", "stored", "computed", "print", "count",
+                "item", "tag", "job", "extra", "count",
             ]
         )
+        for plainName in ["hidden", "highlighter", "local", "name", "value", "inside", "created", "outside", "read"] {
+            XCTAssertFalse(pieces(source, role: .codeMember).contains(plainName), plainName)
+        }
         XCTAssertTrue(pieces(source, role: .codeSystemType).contains("String"))
         XCTAssertTrue(pieces(source, role: .codeSystemType).contains("Int"))
         XCTAssertTrue(pieces(source, role: .codeSystemType).contains("NSView"))
         XCTAssertTrue(pieces(source, role: .codeSystemType).contains("UIView"))
         XCTAssertTrue(pieces(source, role: .codeType).contains("EditorConfiguration"))
-        XCTAssertTrue(pieces(source, role: .codeType).contains("MarkdownHighlighter"))
         XCTAssertTrue(pieces(source, role: .codeType).contains("Sample"))
         XCTAssertFalse(pieces(source, role: .codeType).contains("String"))
-        XCTAssertFalse(pieces(source, role: .codeVariable).contains("read"))
         XCTAssertTrue(pieces(source, role: .codeKeyword).contains("let"))
-        XCTAssertTrue(pieces(source, role: .codeKeyword).contains("var"))
         XCTAssertTrue(pieces(source, role: .codeKeyword).contains("guard"))
-        XCTAssertTrue(pieces(source, role: .codeMember).contains("count"))
-        XCTAssertTrue(pieces(source, role: .codeMember).contains("print"))
-        XCTAssertFalse(pieces(source, role: .codeVariable).contains("print"))
     }
 
     func testJSONShellAndHTMLFences() {
@@ -239,7 +254,7 @@ final class FencedCodeTests: XCTestCase {
         XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(".code-member { color: var(--code-member); }"))
         XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(HighlightTheme.standard.color(for: .codeMember, isSyntax: false).light.cssHex))
         XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(HighlightTheme.standard.color(for: .codeMember, isSyntax: false).dark.cssHex))
-        XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(".code-variable { color: var(--code-variable); }"))
+        XCTAssertFalse(MarkdownHTMLRenderer.stylesheet.contains("code-variable"))
         XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(".code-system-type { color: var(--code-system-type); }"))
         XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(HighlightTheme.standard.color(for: .codeSystemType, isSyntax: false).light.cssHex))
         XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(HighlightTheme.standard.color(for: .codeAttribute, isSyntax: false).dark.cssHex))
