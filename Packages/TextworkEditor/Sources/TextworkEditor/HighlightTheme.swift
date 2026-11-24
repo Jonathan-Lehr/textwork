@@ -104,7 +104,8 @@ public struct HighlightRunStyle: Equatable, Sendable {
 /// classifies an HTML tag. A property or method the surrounding type did not
 /// declare uses Xcode's other property and function color. That is a name
 /// after a dot, or a call of an unknown name. A `let` or `var` declared in a
-/// type body, a later bare use of that property, and a call of a `func`
+/// type body, a later bare use of that property, an assignment to an unknown
+/// lowercase name in that type, and a call of a `func`
 /// declared there use the project property color. A local `let` or `var`,
 /// including `guard let` and `if let`, stays the plain code color, and so do
 /// later uses of that local name. A parameter with the same name hides the

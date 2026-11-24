@@ -318,6 +318,10 @@ private func scanSwift(
                 // A local or parameter hides the property, so this use stays plain.
             } else if barePropertyReference(word, state: state) {
                 appendToken(start..<index, role: .codeMember, into: &tokens)
+            } else if insideTypeBody(state),
+                      assignmentFollows(bytes, end: index, limit: limit) {
+                recordProperty(word, state: &state)
+                appendToken(start..<index, role: .codeMember, into: &tokens)
             } else if identifierPrecedesParenthesis(bytes, end: index, limit: limit) {
                 let role: HighlightRole = declaredTypeFunction(word, state: state) ? .codeMember : .codeOtherMember
                 appendToken(start..<index, role: role, into: &tokens)
@@ -837,6 +841,36 @@ private let swiftSystemTypeNames: Set<String> = [
     "AnyPublisher", "Future", "Just", "Deferred", "PassthroughSubject", "CurrentValueSubject",
     "Published", "ObservableObject", "Observable", "Bindable",
 ]
+
+private func insideTypeBody(_ state: FencedCodeScanState) -> Bool {
+    state.scopes.contains { $0.kind == .typeBody }
+}
+
+/// True for `name =` and `name +=`, and false for comparisons such as `name ==`.
+private func assignmentFollows(_ bytes: [UInt8], end: Int, limit: Int) -> Bool {
+    var index = end
+    while index < limit, bytes[index] == 0x20 || bytes[index] == 0x09 {
+        index += 1
+    }
+    guard index < limit, isAssignmentOperatorByte(bytes[index]) else { return false }
+    var symbol = ""
+    while index < limit, isAssignmentOperatorByte(bytes[index]) {
+        symbol.append(Character(Unicode.Scalar(bytes[index])))
+        index += 1
+    }
+    guard symbol.hasSuffix("="), !symbol.hasSuffix("==") else { return false }
+    if symbol == "!=" || symbol == "!==" || symbol == "<=" || symbol == ">=" { return false }
+    return true
+}
+
+private func isAssignmentOperatorByte(_ byte: UInt8) -> Bool {
+    switch byte {
+    case 0x21, 0x25, 0x26, 0x2A, 0x2B, 0x2D, 0x2F, 0x3C, 0x3D, 0x3E, 0x5E, 0x7C:
+        return true
+    default:
+        return false
+    }
+}
 
 /// True when a dot, ignoring spaces and tabs, is the character before the identifier.
 private func identifierFollowsDot(_ bytes: [UInt8], start: Int, lineStart: Int) -> Bool {

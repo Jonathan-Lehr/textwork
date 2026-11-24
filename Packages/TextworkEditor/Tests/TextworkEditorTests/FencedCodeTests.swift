@@ -35,6 +35,60 @@ final class FencedCodeTests: XCTestCase {
         XCTAssertTrue(pieces(source, role: .codeMember).isEmpty)
     }
 
+    func testAssignmentInAnExtensionInfersProperties() {
+        let source = """
+        ```swift
+        extension EBook: Decodable {
+            init(from decoder: Decoder) throws {
+                let values = try decoder.container(keyedBy: CodingKeys.self)
+                title = try values.decode(String.self, forKey: .title)
+                author = try values.decode(String.self, forKey: .author)
+                releaseDate = try values.decode(Date.self, forKey: .releaseDate)
+                let average = try values.decode(Double.self, forKey: CodingKeys.averageUserRating)
+                let count = try values.decode(Int.self, forKey: CodingKeys.userRatingCount)
+                rating = Rating(average: average, count: count)
+            }
+        }
+        ```
+        """
+        let members = pieces(source, role: .codeMember)
+        for property in ["title", "author", "releaseDate", "rating"] {
+            XCTAssertTrue(members.contains(property), property)
+        }
+        for plainName in ["values", "average", "count", "decoder", "from"] {
+            XCTAssertFalse(members.contains(plainName), plainName)
+        }
+        XCTAssertTrue(pieces(source, role: .codeSystemType).contains("Decoder"))
+        XCTAssertTrue(pieces(source, role: .codeSystemType).contains("Decodable"))
+        XCTAssertTrue(pieces(source, role: .codeType).contains("EBook"))
+        XCTAssertTrue(pieces(source, role: .codeType).contains("CodingKeys"))
+        XCTAssertTrue(pieces(source, role: .codeType).contains("Rating"))
+
+        let laterUse = """
+        ```swift
+        extension EBook {
+            func note() {
+                title = "x"
+                let saved = title
+                rating += 1
+            }
+            func shadowed(title: String) {
+                title = "y"
+                let saved = title
+            }
+            func compare() {
+                if flag == true { return }
+            }
+        }
+        ```
+        """
+        let laterMembers = pieces(laterUse, role: .codeMember)
+        XCTAssertEqual(laterMembers.filter { $0 == "title" }.count, 2)
+        XCTAssertTrue(laterMembers.contains("rating"))
+        XCTAssertFalse(laterMembers.contains("saved"))
+        XCTAssertFalse(laterMembers.contains("flag"))
+    }
+
     func testJSONEncoderIsASystemType() {
         let source = """
         ```swift
