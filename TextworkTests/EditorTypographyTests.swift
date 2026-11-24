@@ -133,11 +133,11 @@ final class EditorTypographyTests: XCTestCase {
             matches: theme.color(for: .codeSpan, isSyntax: true),
             "Inline code markers stay quieter than the words"
         )
-        let answerLocation = (text as NSString).range(of: "answer").location
+        let plainCodeLocation = (text as NSString).range(of: "=").location
         assertPaintedColor(
-            storage.attribute(.foregroundColor, at: answerLocation, effectiveRange: nil) as? NSColor,
+            storage.attribute(.foregroundColor, at: plainCodeLocation, effectiveRange: nil) as? NSColor,
             matches: theme.color(for: .codeBlock, isSyntax: false),
-            "Fenced code keeps the code color"
+            "Uncolored fenced code keeps the code color"
         )
 
         XCTAssertEqual(textView.font?.fontName, "Menlo-Regular")
