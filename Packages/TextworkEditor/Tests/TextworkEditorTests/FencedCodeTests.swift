@@ -111,7 +111,7 @@ final class FencedCodeTests: XCTestCase {
             pieces(source, role: .codeVariable),
             [
                 "text", "configuration", "highlighter", "count", "text", "name", "text",
-                "name", "value", "name", "value", "stored", "stored", "outside",
+                "name", "value", "name", "value", "name", "stored", "stored", "outside",
             ]
         )
         XCTAssertTrue(pieces(source, role: .codeSystemType).contains("String"))
