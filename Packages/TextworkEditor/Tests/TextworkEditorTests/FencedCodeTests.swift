@@ -25,10 +25,212 @@ final class FencedCodeTests: XCTestCase {
         XCTAssertTrue(pieces(source, role: .codeComment).joined(separator: "\n").contains("block"))
         let types = pieces(source, role: .codeType)
         XCTAssertTrue(types.contains("Foundation"))
-        XCTAssertTrue(types.contains("Int"))
-        XCTAssertTrue(types.contains("String"))
+        XCTAssertFalse(types.contains("Int"))
+        XCTAssertFalse(types.contains("String"))
+        let systemTypes = pieces(source, role: .codeSystemType)
+        XCTAssertTrue(systemTypes.contains("Int"))
+        XCTAssertTrue(systemTypes.contains("String"))
         XCTAssertEqual(pieces(source, role: .codeAttribute), ["@available"])
         XCTAssertTrue(pieces(source, role: .codeBlock).contains("let answer: Int = 42"))
+        XCTAssertTrue(pieces(source, role: .codeMember).isEmpty)
+    }
+
+    func testAssignmentInAnExtensionInfersProperties() {
+        let source = """
+        ```swift
+        extension EBook: Decodable {
+            init(from decoder: Decoder) throws {
+                let values = try decoder.container(keyedBy: CodingKeys.self)
+                title = try values.decode(String.self, forKey: .title)
+                author = try values.decode(String.self, forKey: .author)
+                releaseDate = try values.decode(Date.self, forKey: .releaseDate)
+                let average = try values.decode(Double.self, forKey: CodingKeys.averageUserRating)
+                let count = try values.decode(Int.self, forKey: CodingKeys.userRatingCount)
+                rating = Rating(average: average, count: count)
+            }
+        }
+        ```
+        """
+        let members = pieces(source, role: .codeMember)
+        for property in ["title", "author", "releaseDate", "rating"] {
+            XCTAssertTrue(members.contains(property), property)
+        }
+        for plainName in ["values", "average", "count", "decoder", "from"] {
+            XCTAssertFalse(members.contains(plainName), plainName)
+        }
+        XCTAssertTrue(pieces(source, role: .codeSystemType).contains("Decoder"))
+        XCTAssertTrue(pieces(source, role: .codeSystemType).contains("Decodable"))
+        XCTAssertTrue(pieces(source, role: .codeType).contains("EBook"))
+        XCTAssertTrue(pieces(source, role: .codeType).contains("CodingKeys"))
+        XCTAssertTrue(pieces(source, role: .codeType).contains("Rating"))
+
+        let laterUse = """
+        ```swift
+        extension EBook {
+            func note() {
+                title = "x"
+                let saved = title
+                rating += 1
+            }
+            func shadowed(title: String) {
+                title = "y"
+                let saved = title
+            }
+            func compare() {
+                if flag == true { return }
+            }
+        }
+        ```
+        """
+        let laterMembers = pieces(laterUse, role: .codeMember)
+        XCTAssertEqual(laterMembers.filter { $0 == "title" }.count, 2)
+        XCTAssertTrue(laterMembers.contains("rating"))
+        XCTAssertFalse(laterMembers.contains("saved"))
+        XCTAssertFalse(laterMembers.contains("flag"))
+    }
+
+    func testJSONEncoderIsASystemType() {
+        let source = """
+        ```swift
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+        let list = PropertyListEncoder()
+        ```
+        """
+        XCTAssertEqual(
+            pieces(source, role: .codeSystemType),
+            ["JSONEncoder", "JSONDecoder", "PropertyListEncoder"]
+        )
+        XCTAssertFalse(pieces(source, role: .codeType).contains("JSONEncoder"))
+        XCTAssertFalse(pieces(source, role: .codeOtherMember).contains("JSONEncoder"))
+        XCTAssertFalse(pieces(source, role: .codeMember).contains("encoder"))
+    }
+
+    func testSwiftPropertiesAndMethodsUseTheMemberColor() {
+        let source = """
+        ```swift
+        let storage = textView.textStorage
+        storage.length
+        textView?.textStorage
+        panel . isVisible
+        applyTypingAttributes()
+        refresh ()
+        highlighter.highlight(source)
+        let value = NSAttributedString(string: "Code")
+        func greet(_ name: String) {}
+        func
+        declared()
+        if ready { return }
+        let count = 42
+        ```
+        """
+        XCTAssertEqual(
+            pieces(source, role: .codeOtherMember),
+            [
+                "textStorage",
+                "length",
+                "textStorage",
+                "isVisible",
+                "applyTypingAttributes",
+                "refresh",
+                "highlight",
+            ]
+        )
+        XCTAssertTrue(pieces(source, role: .codeMember).isEmpty)
+        XCTAssertTrue(pieces(source, role: .codeSystemType).contains("NSAttributedString"))
+        XCTAssertTrue(pieces(source, role: .codeSystemType).contains("String"))
+        XCTAssertFalse(pieces(source, role: .codeType).contains("NSAttributedString"))
+        XCTAssertFalse(pieces(source, role: .codeMember).contains("NSAttributedString"))
+        XCTAssertFalse(pieces(source, role: .codeMember).contains("greet"))
+        XCTAssertFalse(pieces(source, role: .codeMember).contains("declared"))
+        XCTAssertFalse(pieces(source, role: .codeMember).contains("string"))
+        XCTAssertFalse(pieces(source, role: .codeMember).contains("name"))
+        XCTAssertFalse(pieces(source, role: .codeMember).contains("ready"))
+        XCTAssertFalse(pieces(source, role: .codeMember).contains("count"))
+        XCTAssertTrue(pieces(source, role: .codeKeyword).contains("func"))
+        XCTAssertTrue(pieces(source, role: .codeKeyword).contains("if"))
+        XCTAssertTrue(pieces(source, role: .codeKeyword).contains("return"))
+        XCTAssertEqual(pieces(source, role: .codeNumber), ["42"])
+        XCTAssertTrue(pieces("```bash\necho(1)\n```", role: .codeMember).isEmpty)
+    }
+
+    func testSwiftPropertiesStayTealAndLocalsStayPlain() {
+        let source = """
+        ```swift
+        struct Sample {
+            @Binding var text: String
+            @MainActor @State var configuration: EditorConfiguration
+            var stored: Int
+            var snapshot: Int
+            var computed: Int {
+                let hidden = stored
+                return hidden
+            }
+            func read() {
+                let highlighter = text
+                var local = highlighter
+                guard let name = local else { return }
+                print(name)
+                if let value = name {
+                    value
+                }
+                configuration.count
+                snapshot = stored
+                read()
+                self.stored
+                let items = {
+                    let inside = 1
+                    return inside
+                }
+            }
+            func shadowed(configuration: EditorConfiguration) {
+                let text = configuration
+                text
+            }
+            init() {
+                let created = 1
+                created
+            }
+        }
+        class Box { let item = 1 }
+        enum Choice { let tag = 1 }
+        actor Worker { var job = 1 }
+        extension Sample { var extra = 1 }
+        protocol Listing { var count: Int { get } }
+        let outside = NSView()
+        UIView.self
+        ```
+        """
+        XCTAssertEqual(
+            pieces(source, role: .codeAttribute),
+            ["@Binding", "@MainActor", "@State"]
+        )
+        XCTAssertEqual(
+            pieces(source, role: .codeMember),
+            [
+                "text", "configuration", "stored", "snapshot", "computed", "stored", "text",
+                "configuration", "snapshot", "stored", "read", "stored",
+                "item", "tag", "job", "extra", "count",
+            ]
+        )
+        XCTAssertTrue(pieces(source, role: .codeOtherMember).contains("print"))
+        XCTAssertTrue(pieces(source, role: .codeOtherMember).contains("count"))
+        let members = pieces(source, role: .codeMember)
+        XCTAssertEqual(members.filter { $0 == "configuration" }.count, 2)
+        XCTAssertEqual(members.filter { $0 == "text" }.count, 2)
+        XCTAssertEqual(members.filter { $0 == "snapshot" }.count, 2)
+        for plainName in ["hidden", "highlighter", "local", "name", "value", "inside", "created", "outside"] {
+            XCTAssertFalse(pieces(source, role: .codeMember).contains(plainName), plainName)
+        }
+        XCTAssertTrue(pieces(source, role: .codeSystemType).contains("String"))
+        XCTAssertTrue(pieces(source, role: .codeSystemType).contains("Int"))
+        XCTAssertTrue(pieces(source, role: .codeSystemType).contains("NSView"))
+        XCTAssertTrue(pieces(source, role: .codeSystemType).contains("UIView"))
+        XCTAssertTrue(pieces(source, role: .codeType).contains("EditorConfiguration"))
+        XCTAssertTrue(pieces(source, role: .codeType).contains("Sample"))
+        XCTAssertFalse(pieces(source, role: .codeType).contains("String"))
+        XCTAssertTrue(pieces(source, role: .codeKeyword).contains("let"))
+        XCTAssertTrue(pieces(source, role: .codeKeyword).contains("guard"))
     }
 
     func testJSONShellAndHTMLFences() {
@@ -130,8 +332,20 @@ final class FencedCodeTests: XCTestCase {
         let html = renderer.renderBody("```html\n<div class=\"x\">\n```")
         XCTAssertTrue(html.contains("<span class=\"code-tag\">div</span>"))
         XCTAssertTrue(html.contains("&quot;") || html.contains("class=\"code-string\""))
-        XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(".code-keyword { color: var(--code-keyword); }"))
+        XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(".code-keyword { color: var(--code-keyword); font-weight: bold; }"))
         XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(HighlightTheme.standard.color(for: .codeKeyword, isSyntax: false).light.cssHex))
+        let members = renderer.renderBody("```swift\nstorage.length\napplyTypingAttributes()\nfunc greet() {}\n```")
+        XCTAssertTrue(members.contains("<span class=\"code-other-member\">length</span>"))
+        XCTAssertTrue(members.contains("<span class=\"code-other-member\">applyTypingAttributes</span>"))
+        XCTAssertFalse(members.contains("<span class=\"code-member\">greet</span>"))
+        XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(".code-other-member { color: var(--code-other-member); }"))
+        XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(".code-member { color: var(--code-member); }"))
+        XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(HighlightTheme.standard.color(for: .codeMember, isSyntax: false).light.cssHex))
+        XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(HighlightTheme.standard.color(for: .codeMember, isSyntax: false).dark.cssHex))
+        XCTAssertFalse(MarkdownHTMLRenderer.stylesheet.contains("code-variable"))
+        XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(".code-system-type { color: var(--code-system-type); }"))
+        XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(HighlightTheme.standard.color(for: .codeSystemType, isSyntax: false).light.cssHex))
+        XCTAssertTrue(MarkdownHTMLRenderer.stylesheet.contains(HighlightTheme.standard.color(for: .codeAttribute, isSyntax: false).dark.cssHex))
     }
 
     private func pieces(_ text: String, role: HighlightRole) -> [String] {

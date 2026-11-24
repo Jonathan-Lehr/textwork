@@ -109,13 +109,16 @@ public struct MarkdownHTMLRenderer: Sendable {
           font-size: inherit;
           line-height: 1.3;
         }
-        .code-keyword { color: var(--code-keyword); }
+        .code-keyword { color: var(--code-keyword); font-weight: bold; }
         .code-string { color: var(--code-string); }
         .code-number { color: var(--code-number); }
         .code-comment { color: var(--code-comment); }
         .code-type { color: var(--code-type); }
         .code-tag { color: var(--code-tag); }
         .code-attribute { color: var(--code-attribute); }
+        .code-member { color: var(--code-member); }
+        .code-other-member { color: var(--code-other-member); }
+        .code-system-type { color: var(--code-system-type); }
         blockquote {
           margin: 0 0 0.9em;
           padding: 0.1em 0 0.1em 1em;

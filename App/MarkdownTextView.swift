@@ -241,6 +241,8 @@ private enum HighlightColors {
             font = configuration.bodyFont()
         case .monospaced:
             font = configuration.monospacedFont()
+        case .boldMonospaced:
+            font = configuration.boldFont(ofSize: configuration.resolvedFontSize)
         case .heading:
             let size = configuration.resolvedFontSize + headingBoost(span.role)
             font = configuration.boldFont(ofSize: size)
@@ -450,6 +452,8 @@ private enum HighlightColors {
             font = configuration.bodyFont()
         case .monospaced:
             font = configuration.monospacedFont()
+        case .boldMonospaced:
+            font = configuration.boldFont(ofSize: configuration.resolvedFontSize)
         case .heading:
             let size = configuration.resolvedFontSize + headingBoost(span.role)
             font = configuration.boldFont(ofSize: size)

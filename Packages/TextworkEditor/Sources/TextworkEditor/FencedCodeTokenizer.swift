@@ -8,11 +8,42 @@ enum FencedCodeLanguage: Equatable, Sendable {
     case html
 }
 
-/// Carry block comments and multiline strings from one fence line to the next.
+/// Carry block comments, multiline strings, and a pending function name from one fence line to the next.
 struct FencedCodeScanState: Equatable, Sendable {
     var blockCommentDepth: Int = 0
     var insideMultilineString: Bool = false
     var insideHTMLComment: Bool = false
+    /// The next identifier is the name declared after `func`, so it stays plain.
+    var awaitingFunctionName: Bool = false
+    /// The next identifier is a `let` or `var` property in a type body.
+    var awaitingPropertyName: Bool = false
+    /// The next identifier is a local `let` or `var`, so it stays plain and can shadow a property.
+    var awaitingLocalName: Bool = false
+    /// Identifiers inside the parameter list that belongs to the next function body.
+    var scanningParameterList: Bool = false
+    var pendingParameterNames: Set<String> = []
+    /// The next `{` opens a class, struct, enum, actor, extension, or protocol body.
+    var nextBraceOpensTypeBody: Bool = false
+    /// The next `{` opens a function, initializer, closure, or accessor body.
+    var nextBraceOpensFunctionBody: Bool = false
+    /// Outermost first. A type body is where `let` and `var` names are properties.
+    var scopes: [SwiftBraceScope] = []
+}
+
+/// One `{` block and the names declared in it.
+struct SwiftBraceScope: Equatable, Sendable {
+    var kind: SwiftBraceKind
+    var propertyNames: Set<String> = []
+    var functionNames: Set<String> = []
+    var localNames: Set<String> = []
+    /// A closure may still be listing parameters before `in`.
+    var closureParametersPossible: Bool = false
+}
+
+/// Whether a `{` block is a type declaration or a nested body of code.
+enum SwiftBraceKind: Equatable, Sendable {
+    case typeBody
+    case functionBody
 }
 
 /// One colored token inside a fenced code line. Offsets are document bytes.
@@ -107,6 +138,9 @@ enum FencedCodeTokenizer {
         case .codeType: "code-type"
         case .codeTag: "code-tag"
         case .codeAttribute: "code-attribute"
+        case .codeMember: "code-member"
+        case .codeOtherMember: "code-other-member"
+        case .codeSystemType: "code-system-type"
         default: nil
         }
     }
@@ -219,20 +253,84 @@ private func scanSwift(
             appendToken(start..<index, role: .codeAttribute, into: &tokens)
             continue
         }
+        if byte == 0x7B {
+            openSwiftBrace(&state)
+            index += 1
+            continue
+        }
+        if byte == 0x7D {
+            closeSwiftBrace(&state)
+            index += 1
+            continue
+        }
+        if byte == 0x28, state.nextBraceOpensFunctionBody {
+            state.scanningParameterList = true
+            state.awaitingPropertyName = false
+            state.awaitingLocalName = false
+            index += 1
+            continue
+        }
+        if byte == 0x29, state.scanningParameterList {
+            state.scanningParameterList = false
+            index += 1
+            continue
+        }
         if isDigit(byte) {
             index = consumeNumber(bytes, from: index, limit: limit, into: &tokens)
+            state.awaitingPropertyName = false
+            state.awaitingLocalName = false
             continue
         }
         if isIdentifierStart(byte) {
             let start = index
             index = consumeIdentifier(bytes, from: index, limit: limit)
             let word = String(decoding: bytes[start..<index], as: UTF8.self)
+            let followsDot = identifierFollowsDot(bytes, start: start, lineStart: range.lowerBound)
             if swiftKeywords.contains(word) {
                 appendToken(start..<index, role: .codeKeyword, into: &tokens)
+                noteSwiftKeyword(word, state: &state)
+            } else if state.awaitingFunctionName {
+                state.awaitingFunctionName = false
+                state.awaitingPropertyName = false
+                state.awaitingLocalName = false
+                if state.scopes.last?.kind == .typeBody {
+                    recordFunction(word, state: &state)
+                }
+            } else if state.awaitingPropertyName {
+                state.awaitingPropertyName = false
+                recordProperty(word, state: &state)
+                appendToken(start..<index, role: .codeMember, into: &tokens)
+            } else if state.scanningParameterList, !isTypeName(word, firstByte: byte) {
+                state.pendingParameterNames.insert(word)
+            } else if isClosureParameter(word, bytes: bytes, end: index, limit: limit, state: state) {
+                recordLocal(word, state: &state)
+            } else if state.awaitingLocalName {
+                state.awaitingLocalName = false
+                recordLocal(word, state: &state)
+            } else if isSystemTypeName(word) {
+                appendToken(start..<index, role: .codeSystemType, into: &tokens)
             } else if byte >= 0x41 && byte <= 0x5A {
                 appendToken(start..<index, role: .codeType, into: &tokens)
+            } else if followsDot {
+                let role: HighlightRole = declaredTypeMember(word, state: state) ? .codeMember : .codeOtherMember
+                appendToken(start..<index, role: role, into: &tokens)
+            } else if localNameShadowsProperty(word, state: state) {
+                // A local or parameter hides the property, so this use stays plain.
+            } else if barePropertyReference(word, state: state) {
+                appendToken(start..<index, role: .codeMember, into: &tokens)
+            } else if insideTypeBody(state),
+                      assignmentFollows(bytes, end: index, limit: limit) {
+                recordProperty(word, state: &state)
+                appendToken(start..<index, role: .codeMember, into: &tokens)
+            } else if identifierPrecedesParenthesis(bytes, end: index, limit: limit) {
+                let role: HighlightRole = declaredTypeFunction(word, state: state) ? .codeMember : .codeOtherMember
+                appendToken(start..<index, role: role, into: &tokens)
             }
             continue
+        }
+        if byte != 0x20 && byte != 0x09 && byte != 0x0A && byte != 0x0D {
+            state.awaitingPropertyName = false
+            state.awaitingLocalName = false
         }
         index += DocumentBuffer.scalarWidth(bytes, index).0
     }
@@ -537,6 +635,269 @@ private func isDigit(_ byte: UInt8) -> Bool { byte >= 0x30 && byte <= 0x39 }
 private func isHexDigit(_ byte: UInt8) -> Bool {
     isDigit(byte) || (byte >= 0x41 && byte <= 0x46) || (byte >= 0x61 && byte <= 0x66)
 }
+private func noteSwiftKeyword(_ word: String, state: inout FencedCodeScanState) {
+    switch word {
+    case "func", "init", "subscript", "deinit", "get", "set", "willSet", "didSet":
+        state.awaitingFunctionName = word == "func"
+        state.awaitingPropertyName = false
+        state.nextBraceOpensFunctionBody = true
+        state.nextBraceOpensTypeBody = false
+    case "class", "struct", "enum", "actor", "extension", "protocol":
+        state.awaitingFunctionName = false
+        state.awaitingPropertyName = false
+        state.nextBraceOpensTypeBody = true
+        state.nextBraceOpensFunctionBody = false
+    case "let", "var":
+        state.awaitingFunctionName = false
+        let inTypeBody = state.scopes.last?.kind == .typeBody
+        state.awaitingPropertyName = inTypeBody
+        state.awaitingLocalName = !inTypeBody && !state.scopes.isEmpty
+        if var scope = state.scopes.last, scope.closureParametersPossible {
+            scope.closureParametersPossible = false
+            state.scopes[state.scopes.count - 1] = scope
+        }
+    case "in":
+        state.awaitingFunctionName = false
+        state.awaitingPropertyName = false
+        state.awaitingLocalName = false
+        if var scope = state.scopes.last, scope.closureParametersPossible {
+            scope.closureParametersPossible = false
+            state.scopes[state.scopes.count - 1] = scope
+        }
+    default:
+        state.awaitingFunctionName = false
+        state.awaitingPropertyName = false
+        state.awaitingLocalName = false
+    }
+}
+
+private func openSwiftBrace(_ state: inout FencedCodeScanState) {
+    let kind: SwiftBraceKind = state.nextBraceOpensTypeBody ? .typeBody : .functionBody
+    var scope = SwiftBraceScope(kind: kind)
+    scope.localNames = state.pendingParameterNames
+    scope.closureParametersPossible = kind == .functionBody && !state.nextBraceOpensFunctionBody
+    state.pendingParameterNames = []
+    state.scopes.append(scope)
+    state.nextBraceOpensTypeBody = false
+    state.nextBraceOpensFunctionBody = false
+    state.scanningParameterList = false
+    state.awaitingFunctionName = false
+    state.awaitingPropertyName = false
+    state.awaitingLocalName = false
+}
+
+private func closeSwiftBrace(_ state: inout FencedCodeScanState) {
+    if !state.scopes.isEmpty {
+        state.scopes.removeLast()
+    }
+    state.awaitingPropertyName = false
+    state.awaitingLocalName = false
+}
+
+private func recordProperty(_ name: String, state: inout FencedCodeScanState) {
+    guard let index = state.scopes.lastIndex(where: { $0.kind == .typeBody }) else { return }
+    state.scopes[index].propertyNames.insert(name)
+}
+
+private func recordFunction(_ name: String, state: inout FencedCodeScanState) {
+    guard let index = state.scopes.lastIndex(where: { $0.kind == .typeBody }) else { return }
+    state.scopes[index].functionNames.insert(name)
+}
+
+/// A name declared with `let`, `var`, or `func` on the enclosing type.
+private func declaredTypeMember(_ name: String, state: FencedCodeScanState) -> Bool {
+    guard let scope = state.scopes.last(where: { $0.kind == .typeBody }) else { return false }
+    return scope.propertyNames.contains(name) || scope.functionNames.contains(name)
+}
+
+private func declaredTypeFunction(_ name: String, state: FencedCodeScanState) -> Bool {
+    guard let scope = state.scopes.last(where: { $0.kind == .typeBody }) else { return false }
+    return scope.functionNames.contains(name)
+}
+
+private func recordLocal(_ name: String, state: inout FencedCodeScanState) {
+    guard !state.scopes.isEmpty else { return }
+    let index = state.scopes.count - 1
+    state.scopes[index].localNames.insert(name)
+}
+
+/// A bare name refers to a property when no inner local or parameter hides it.
+private func barePropertyReference(_ name: String, state: FencedCodeScanState) -> Bool {
+    for scope in state.scopes.reversed() {
+        if scope.localNames.contains(name) { return false }
+        if scope.kind == .typeBody {
+            return scope.propertyNames.contains(name)
+        }
+    }
+    return false
+}
+
+private func localNameShadowsProperty(_ name: String, state: FencedCodeScanState) -> Bool {
+    for scope in state.scopes.reversed() {
+        if scope.localNames.contains(name) { return true }
+        if scope.kind == .typeBody { return false }
+    }
+    return false
+}
+
+private func isTypeName(_ word: String, firstByte: UInt8) -> Bool {
+    isSystemTypeName(word) || (firstByte >= 0x41 && firstByte <= 0x5A)
+}
+
+private func isClosureParameter(
+    _ word: String,
+    bytes: [UInt8],
+    end: Int,
+    limit: Int,
+    state: FencedCodeScanState
+) -> Bool {
+    guard state.scopes.last?.closureParametersPossible == true else { return false }
+    guard !isTypeName(word, firstByte: word.utf8.first ?? 0) else { return false }
+    return closureIntroducesParameter(bytes, from: end, limit: limit)
+}
+
+/// True when `in` appears before a statement, so this identifier is a closure parameter.
+private func closureIntroducesParameter(_ bytes: [UInt8], from end: Int, limit: Int) -> Bool {
+    let stops: Set<String> = ["let", "var", "return", "guard", "if", "else", "while", "for", "switch", "func"]
+    var index = end
+    while index < limit {
+        let byte = bytes[index]
+        if byte == 0x20 || byte == 0x09 || byte == 0x0A || byte == 0x0D {
+            index += 1
+            continue
+        }
+        if byte == 0x3D || byte == 0x7B { return false }
+        if isIdentifierStart(byte) {
+            let start = index
+            index = consumeIdentifier(bytes, from: index, limit: limit)
+            let word = String(decoding: bytes[start..<index], as: UTF8.self)
+            if word == "in" { return true }
+            if stops.contains(word) { return false }
+            continue
+        }
+        index += 1
+    }
+    return false
+}
+
+private func isSystemTypeName(_ word: String) -> Bool {
+    if swiftSystemTypeNames.contains(word) { return true }
+    for prefix in appleFrameworkPrefixes where word.count > prefix.count && word.hasPrefix(prefix) {
+        let nextIndex = word.index(word.startIndex, offsetBy: prefix.count)
+        let next = word[nextIndex]
+        if next.isUppercase { return true }
+    }
+    return false
+}
+
+/// Longest prefixes first so `SCN` matches before a shorter prefix.
+private let appleFrameworkPrefixes: [String] = [
+    "SCN", "MTL", "WK", "NS", "UI", "CG", "CA", "CF", "AV", "MK", "SK",
+    "UN", "CL", "CK", "PH", "GK", "HK", "CM", "CI", "CT", "PK", "AR", "VN",
+].sorted { $0.count > $1.count }
+
+private let swiftSystemTypeNames: Set<String> = [
+    // Swift standard library
+    "String", "Substring", "Character", "Unicode",
+    "Int", "UInt", "Int8", "Int16", "Int32", "Int64",
+    "UInt8", "UInt16", "UInt32", "UInt64",
+    "Double", "Float", "Float16", "Float32", "Float64", "Bool",
+    "Array", "ArraySlice", "Dictionary", "Set", "Optional", "Result",
+    "Error", "LocalizedError", "Never", "Void", "Any", "AnyObject",
+    "Codable", "Encodable", "Decodable", "CodingKey", "Encoder", "Decoder",
+    "Equatable", "Hashable", "Comparable", "Identifiable", "Sendable",
+    "Sequence", "Collection", "IteratorProtocol", "OptionSet", "CaseIterable",
+    "RawRepresentable", "CustomStringConvertible", "CustomDebugStringConvertible",
+    "Range", "ClosedRange", "PartialRangeFrom", "PartialRangeThrough", "PartialRangeUpTo",
+    "KeyPath", "WritableKeyPath", "ReferenceWritableKeyPath", "PartialKeyPath", "AnyKeyPath",
+    "Regex", "Task", "MainActor", "Actor", "UnsafePointer", "UnsafeMutablePointer",
+    "UnsafeRawPointer", "UnsafeMutableRawPointer", "ObjectIdentifier", "Mirror",
+    // Foundation
+    "Data", "Date", "DateComponents", "DateInterval", "URL", "URLRequest", "URLResponse",
+    "HTTPURLResponse", "URLSession", "URLComponents", "URLQueryItem", "UUID",
+    "Decimal", "Locale", "Calendar", "TimeZone", "DateFormatter", "NumberFormatter",
+    "ISO8601DateFormatter", "ByteCountFormatter", "Measurement", "MeasurementFormatter",
+    "IndexPath", "IndexSet", "CharacterSet", "AttributedString", "Notification",
+    "NotificationCenter", "Bundle", "FileManager", "FileHandle", "UserDefaults",
+    "JSONEncoder", "JSONDecoder", "JSONSerialization",
+    "PropertyListEncoder", "PropertyListDecoder", "PropertyListSerialization",
+    "Scanner", "Formatter", "Progress", "Operation", "OperationQueue", "Timer",
+    "RunLoop", "Thread", "Process", "Pipe", "InputStream", "OutputStream",
+    "DispatchQueue", "DispatchGroup", "DispatchWorkItem",
+    // SwiftUI
+    "View", "Text", "Button", "Color", "Font", "Image", "Label", "Link",
+    "VStack", "HStack", "ZStack", "LazyVStack", "LazyHStack", "LazyVGrid", "LazyHGrid",
+    "List", "ForEach", "Section", "Form", "Group", "ScrollView", "Grid",
+    "NavigationStack", "NavigationSplitView", "NavigationLink", "TabView",
+    "Spacer", "Divider", "Toggle", "Picker", "Slider", "Stepper",
+    "TextField", "SecureField", "ProgressView", "Menu",
+    "State", "Binding", "Environment", "EnvironmentObject",
+    "ObservedObject", "StateObject", "FocusState", "AppStorage", "SceneStorage",
+    "App", "Scene", "WindowGroup", "Preview",
+    "Shape", "Path", "Circle", "Rectangle", "RoundedRectangle", "Capsule", "Ellipse",
+    "Alignment", "Angle", "Animation", "Axis", "Edge", "UnitPoint",
+    // Combine and Observation
+    "Publisher", "Subscriber", "Subscription", "Cancellable", "AnyCancellable",
+    "AnyPublisher", "Future", "Just", "Deferred", "PassthroughSubject", "CurrentValueSubject",
+    "Published", "ObservableObject", "Observable", "Bindable",
+]
+
+private func insideTypeBody(_ state: FencedCodeScanState) -> Bool {
+    state.scopes.contains { $0.kind == .typeBody }
+}
+
+/// True for `name =` and `name +=`, and false for comparisons such as `name ==`.
+private func assignmentFollows(_ bytes: [UInt8], end: Int, limit: Int) -> Bool {
+    var index = end
+    while index < limit, bytes[index] == 0x20 || bytes[index] == 0x09 {
+        index += 1
+    }
+    guard index < limit, isAssignmentOperatorByte(bytes[index]) else { return false }
+    var symbol = ""
+    while index < limit, isAssignmentOperatorByte(bytes[index]) {
+        symbol.append(Character(Unicode.Scalar(bytes[index])))
+        index += 1
+    }
+    guard symbol.hasSuffix("="), !symbol.hasSuffix("==") else { return false }
+    if symbol == "!=" || symbol == "!==" || symbol == "<=" || symbol == ">=" { return false }
+    return true
+}
+
+private func isAssignmentOperatorByte(_ byte: UInt8) -> Bool {
+    switch byte {
+    case 0x21, 0x25, 0x26, 0x2A, 0x2B, 0x2D, 0x2F, 0x3C, 0x3D, 0x3E, 0x5E, 0x7C:
+        return true
+    default:
+        return false
+    }
+}
+
+/// True when a dot, ignoring spaces and tabs, is the character before the identifier.
+private func identifierFollowsDot(_ bytes: [UInt8], start: Int, lineStart: Int) -> Bool {
+    var index = start
+    while index > lineStart {
+        index -= 1
+        let byte = bytes[index]
+        if byte == 0x20 || byte == 0x09 { continue }
+        return byte == 0x2E
+    }
+    return false
+}
+
+/// True when a parenthesis, ignoring spaces and tabs, follows the identifier.
+private func identifierPrecedesParenthesis(_ bytes: [UInt8], end: Int, limit: Int) -> Bool {
+    var index = end
+    while index < limit {
+        let byte = bytes[index]
+        if byte == 0x20 || byte == 0x09 {
+            index += 1
+            continue
+        }
+        return byte == 0x28
+    }
+    return false
+}
+
 private func isIdentifierStart(_ byte: UInt8) -> Bool {
     (byte >= 0x41 && byte <= 0x5A) || (byte >= 0x61 && byte <= 0x7A) || byte == 0x5F
 }

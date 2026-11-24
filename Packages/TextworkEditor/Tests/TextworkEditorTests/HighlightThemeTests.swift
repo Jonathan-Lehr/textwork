@@ -23,10 +23,13 @@ final class HighlightThemeTests: XCTestCase {
             .codeKeyword: ExpectedColors("#9B2393", "#FC5FA3", "#AE4EA8", "#DF5691"),
             .codeString: ExpectedColors("#C41A16", "#FC6A5D", "#CE413D", "#DD6054"),
             .codeNumber: ExpectedColors("#1C00CF", "#D0BF69", "#7160E1", "#948950"),
-            .codeComment: ExpectedColors("#5D6C79", "#8495A5", "#6C7985", "#778693"),
+            .codeComment: ExpectedColors("#5D6C79", "#6C7986", "#6C7985", "#65707C"),
             .codeType: ExpectedColors("#1C464A", "#9EF1DD", "#5A797B", "#649187"),
             .codeTag: ExpectedColors("#9B2393", "#FC5FA3", "#AE4EA8", "#DF5691"),
-            .codeAttribute: ExpectedColors("#815F03", "#C08655", "#8E701D", "#AC794E"),
+            .codeAttribute: ExpectedColors("#3900A0", "#D0A8FF", "#8460C4", "#987CB8"),
+            .codeMember: ExpectedColors("#326D74", "#67B7A4", "#467C82", "#569385"),
+            .codeOtherMember: ExpectedColors("#6C36A9", "#A167E6", "#8A60BB", "#9761D7"),
+            .codeSystemType: ExpectedColors("#3900A0", "#D0A8FF", "#8460C4", "#987CB8"),
             .link: ExpectedColors("#0066CC", "#419CFF", "#1C77D2", "#3C8ADF"),
             .image: ExpectedColors("#086E68", "#78E0D6", "#27807B", "#54938D"),
             .listMarker: ExpectedColors("#3A4A78", "#BAC6E8", "#667396", "#80889D"),
@@ -70,10 +73,21 @@ final class HighlightThemeTests: XCTestCase {
             let contentDark = contrast(content.dark, darkBackground)
             let syntaxDark = contrast(syntax.dark, darkBackground)
             XCTAssertGreaterThanOrEqual(contentLight, 4.5, "\(role.rawValue) light content")
-            XCTAssertGreaterThanOrEqual(contentDark, 4.5, "\(role.rawValue) dark content")
             XCTAssertGreaterThanOrEqual(syntaxLight, 4.4, "\(role.rawValue) light syntax")
-            XCTAssertGreaterThanOrEqual(syntaxDark, 4.4, "\(role.rawValue) dark syntax")
             XCTAssertGreaterThan(contentLight, syntaxLight + 0.9, "\(role.rawValue) light")
+            // Two Default (Dark) values sit too close to #1E1E1E to clear 4.5
+            // and still leave a marker above 4.4 that is 0.9 quieter. Comments
+            // are #6C7986 (about 3.7). Other properties and functions are
+            // #A167E6 (about 4.44). The palette keeps those theme values. The
+            // marker only has to stay quieter than the content.
+            if role == .codeComment || role == .codeOtherMember {
+                let exactDark = role == .codeComment ? "#6C7986" : "#A167E6"
+                XCTAssertEqual(content.dark.cssHex, exactDark, role.rawValue)
+                XCTAssertGreaterThan(contentDark, syntaxDark, "\(role.rawValue) dark")
+                continue
+            }
+            XCTAssertGreaterThanOrEqual(contentDark, 4.5, "\(role.rawValue) dark content")
+            XCTAssertGreaterThanOrEqual(syntaxDark, 4.4, "\(role.rawValue) dark syntax")
             XCTAssertGreaterThan(contentDark, syntaxDark + 0.9, "\(role.rawValue) dark")
         }
     }
@@ -107,6 +121,8 @@ final class HighlightThemeTests: XCTestCase {
         XCTAssertEqual(theme.runStyle(for: .codeSpan, isSyntax: true).fontTreatment, .monospaced)
         XCTAssertEqual(theme.runStyle(for: .codeBlock, isSyntax: false).fontTreatment, .monospaced)
         XCTAssertEqual(theme.runStyle(for: .codeBlock, isSyntax: true).fontTreatment, .monospaced)
+        XCTAssertEqual(theme.runStyle(for: .codeKeyword, isSyntax: false).fontTreatment, .boldMonospaced)
+        XCTAssertEqual(theme.runStyle(for: .codeKeyword, isSyntax: true).fontTreatment, .body)
         XCTAssertEqual(theme.runStyle(for: .html, isSyntax: false).fontTreatment, .monospaced)
         XCTAssertEqual(theme.runStyle(for: .html, isSyntax: true).fontTreatment, .body)
         XCTAssertEqual(theme.runStyle(for: .heading1, isSyntax: false).fontTreatment, .heading)
@@ -458,6 +474,8 @@ final class HighlightThemeTests: XCTestCase {
             font = body
         case .monospaced:
             font = mono
+        case .boldMonospaced:
+            font = NSFont(name: "Menlo-Bold", size: fontSize) ?? mono
         case .heading:
             let boost: CGFloat
             switch span.role {
@@ -519,7 +537,7 @@ final class HighlightThemeTests: XCTestCase {
             case .html:
                 font = mono
                 storage.addAttribute(.foregroundColor, value: NSColor.systemTeal, range: range)
-            case .table, .listMarker, .blockQuote, .thematicBreak, .codeKeyword, .codeString, .codeNumber, .codeComment, .codeType, .codeTag, .codeAttribute:
+            case .table, .listMarker, .blockQuote, .thematicBreak, .codeKeyword, .codeString, .codeNumber, .codeComment, .codeType, .codeTag, .codeAttribute, .codeMember, .codeOtherMember, .codeSystemType:
                 break
             }
             storage.addAttribute(.font, value: font, range: range)
