@@ -20,9 +20,19 @@
 		BB0000000000000000000004 /* Exceptions for "App" folder in "TextworkTests" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				Assets.xcassets,
 				TextworkApp.swift,
 			);
 			target = BB0000000000000000000007 /* TextworkTests */;
+		};
+		CC0000000000000000000001 /* Exceptions for "App" folder in "Textwork" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			platformFiltersByRelativePath = {
+				Assets.xcassets = (
+					macos,
+				);
+			};
+			target = AA00000000000000000000F6 /* Textwork */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -31,6 +41,7 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				BB0000000000000000000004 /* Exceptions for "App" folder in "TextworkTests" target */,
+				CC0000000000000000000001 /* Exceptions for "App" folder in "Textwork" target */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -235,6 +246,7 @@
 		AA0000000000000000000A03 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
@@ -266,6 +278,7 @@
 		AA0000000000000000000A04 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
