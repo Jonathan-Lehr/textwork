@@ -212,7 +212,9 @@ public struct MarkdownHighlighter: Sendable {
         let oldRange = BlockStyler.contentByteRange(lines: previous.lines, startLine: oldBlock.startLine, endLine: oldBlock.endLine)
         guard oldRange.count == newRange.count else { return false }
         guard oldRange.lowerBound + byteDelta == newRange.lowerBound else { return false }
-        guard oldRange.upperBound <= previous.bytes.count, newRange.upperBound <= newBytes.count else { return false }
+        guard oldRange.upperBound <= previous.bytes.count, newRange.upperBound <= newBytes.count else {
+            return false
+        }
         return previous.bytes[oldRange] == newBytes[newRange]
     }
 }

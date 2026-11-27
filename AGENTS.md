@@ -25,6 +25,7 @@ Spell names out. Do not abbreviate type names, function names, or enum cases. Wr
 ## Style
 
 - Indent with four spaces. Do not use tab characters.
+- Name a number whose meaning is not obvious from the surrounding code. Put it in a static constant on the type that owns it, or in a small enum of related constants. Leave `0`, `1`, and an obvious offset written inline.
 - Prefer a one-line `case` when the case body is a single short statement. A case with more than one statement stays on multiple lines:
 
 ```swift

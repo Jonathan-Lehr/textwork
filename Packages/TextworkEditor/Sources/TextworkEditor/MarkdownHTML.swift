@@ -309,7 +309,9 @@ public struct MarkdownHTMLRenderer: Sendable {
 
     private func imageSource(_ destination: String) -> String? {
         let decoded = decodeEntities(destination.trimmingCharacters(in: .whitespacesAndNewlines))
-        guard !decoded.isEmpty, !containsControlCharacter(decoded), !decoded.hasPrefix("//") else { return nil }
+        guard !decoded.isEmpty, !containsControlCharacter(decoded), !decoded.hasPrefix("//") else {
+            return nil
+        }
         if let scheme = urlScheme(decoded) {
             guard scheme == "http" || scheme == "https" else { return nil }
             return escapeAttribute(decoded)
@@ -400,7 +402,7 @@ private func entity(in source: String, at start: String.Index) -> (String, Strin
         if hexadecimal { cursor = source.index(after: cursor) }
         let digitsStart = cursor
         var digits = 0
-        while cursor < source.endIndex, digits < 8 {
+        while cursor < source.endIndex, digits < MarkdownScanLimit.maximumNumericCharacterReferenceDigits {
             let character = source[cursor]
             let isDigit = hexadecimal ? character.isHexDigit : character.isNumber
             if !isDigit { break }
@@ -411,7 +413,9 @@ private func entity(in source: String, at start: String.Index) -> (String, Strin
         let text = source[digitsStart..<cursor]
         guard let value = Int(text, radix: hexadecimal ? 16 : 10) else { return nil }
         let next = source.index(after: cursor)
-        if value == 0 || !(0...0x10FFFF).contains(value) || (0xD800...0xDFFF).contains(value) {
+        let outOfRange = !(0...UnicodeScalarBound.maximum).contains(value)
+        let surrogate = (UnicodeScalarBound.surrogateStart...UnicodeScalarBound.surrogateEnd).contains(value)
+        if value == 0 || outOfRange || surrogate {
             return ("\u{FFFD}", next)
         }
         guard let scalar = Unicode.Scalar(value) else { return ("\u{FFFD}", next) }
@@ -419,7 +423,7 @@ private func entity(in source: String, at start: String.Index) -> (String, Strin
     }
     let nameStart = cursor
     var length = 0
-    while cursor < source.endIndex, length < 32 {
+    while cursor < source.endIndex, length < MarkdownScanLimit.maximumCharacterReferenceNameLength {
         let character = source[cursor]
         if !(character.isLetter || character.isNumber) { break }
         length += 1
@@ -445,7 +449,7 @@ func urlScheme(_ destination: String) -> String? {
 }
 
 func containsControlCharacter(_ string: String) -> Bool {
-    string.unicodeScalars.contains { $0.value < 32 || $0.value == 127 }
+    string.unicodeScalars.contains { $0.value < UInt32(ASCIIByte.space) || $0.value == UInt32(ASCIIByte.delete) }
 }
 
 func isASCIILetter(_ character: Character) -> Bool {

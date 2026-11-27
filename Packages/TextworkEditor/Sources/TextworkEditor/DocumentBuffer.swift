@@ -67,8 +67,8 @@ enum DocumentBuffer {
 
         while byteIndex < bytes.count {
             let byte = bytes[byteIndex]
-            if byte == 0x0A || byte == 0x0D {
-                let newlineBytes = (byte == 0x0D && byteIndex + 1 < bytes.count && bytes[byteIndex + 1] == 0x0A) ? 2 : 1
+            if byte == ASCIIByte.lineFeed || byte == ASCIIByte.carriageReturn {
+                let newlineBytes = (byte == ASCIIByte.carriageReturn && byteIndex + 1 < bytes.count && bytes[byteIndex + 1] == ASCIIByte.lineFeed) ? 2 : 1
                 let contentUTF16 = utf16 - lineUTF16Start
                 result.append(
                     TextLine(
@@ -319,7 +319,7 @@ enum DocumentBuffer {
         let lead = leadingWhitespace(slice)
         var index = slice.startIndex + lead.bytes
         var hashes = 0
-        while index < slice.endIndex && slice[index] == 0x23 && hashes < 6 {
+        while index < slice.endIndex && slice[index] == ASCIIByte.hash && hashes < MarkdownScanLimit.maximumHeadingLevel {
             hashes += 1
             index += 1
         }
@@ -355,10 +355,16 @@ enum DocumentBuffer {
     static func scalarWidth(_ bytes: [UInt8], _ index: Int) -> (Int, Int) {
         guard index < bytes.count else { return (0, 0) }
         let byte = bytes[index]
-        if byte < 0x80 { return (1, 1) }
-        if byte & 0xE0 == 0xC0 { return (min(2, bytes.count - index), 1) }
-        if byte & 0xF0 == 0xE0 { return (min(3, bytes.count - index), 1) }
-        if byte & 0xF8 == 0xF0 { return (min(4, bytes.count - index), 2) }
+        if byte < UTF8LeadingByte.singleByteLimit { return (1, 1) }
+        if byte & UTF8LeadingByte.twoByteMask == UTF8LeadingByte.twoBytePrefix {
+            return (min(2, bytes.count - index), 1)
+        }
+        if byte & UTF8LeadingByte.threeByteMask == UTF8LeadingByte.threeBytePrefix {
+            return (min(3, bytes.count - index), 1)
+        }
+        if byte & UTF8LeadingByte.fourByteMask == UTF8LeadingByte.fourBytePrefix {
+            return (min(4, bytes.count - index), 2)
+        }
         return (1, 1)
     }
 }
@@ -382,39 +388,43 @@ enum ReferenceDefinitionParser {
         let end = line.contentByteEnd
         var index = line.byteStart
         var columns = 0
-        while index < end && columns <= 3 {
-            if bytes[index] == 0x20 {
+        while index < end && columns <= MarkdownScanLimit.maximumOpeningIndent {
+            if bytes[index] == ASCIIByte.space {
                 columns += 1
                 index += 1
-            } else if bytes[index] == 0x09 {
-                let next = columns + (4 - (columns % 4))
-                if next > 3 { return nil }
+            } else if bytes[index] == ASCIIByte.tab {
+                let next = columns + (MarkdownScanLimit.tabColumnWidth - (columns % MarkdownScanLimit.tabColumnWidth))
+                if next > MarkdownScanLimit.maximumOpeningIndent { return nil }
                 columns = next
                 index += 1
             } else {
                 break
             }
         }
-        if columns > 3 { return nil }
-        guard index < end, bytes[index] == 0x5B, !isEscapedByte(bytes, index) else { return nil }
+        if columns > MarkdownScanLimit.maximumOpeningIndent { return nil }
+        guard index < end, bytes[index] == ASCIIByte.leftBracket, !isEscapedByte(bytes, index) else {
+            return nil
+        }
         let opening = index
         index += 1
         let labelStart = index
         while index < end {
-            if bytes[index] == 0x5C, index + 1 < end {
+            if bytes[index] == ASCIIByte.backslash, index + 1 < end {
                 index += 2
                 continue
             }
-            if bytes[index] == 0x5B || bytes[index] == 0x0A { return nil }
-            if bytes[index] == 0x5D { break }
+            if bytes[index] == ASCIIByte.leftBracket || bytes[index] == ASCIIByte.lineFeed { return nil }
+            if bytes[index] == ASCIIByte.rightBracket { break }
             index += 1
         }
-        guard index < end, bytes[index] == 0x5D else { return nil }
+        guard index < end, bytes[index] == ASCIIByte.rightBracket else { return nil }
         let labelEnd = index
         let closing = index
-        guard labelEnd > labelStart, labelEnd - labelStart <= 999 else { return nil }
+        guard labelEnd > labelStart, labelEnd - labelStart <= MarkdownScanLimit.maximumReferenceLabelLength else {
+            return nil
+        }
         index += 1
-        guard index < end, bytes[index] == 0x3A else { return nil }
+        guard index < end, bytes[index] == ASCIIByte.colon else { return nil }
         let colon = index
         index += 1
         index = skipHorizontalSpace(bytes, index, end)
@@ -423,19 +433,21 @@ enum ReferenceDefinitionParser {
         var destination: Range<Int>
         var destinationOpening: Int?
         var destinationClosing: Int?
-        if bytes[index] == 0x3C {
+        if bytes[index] == ASCIIByte.lessThan {
             destinationOpening = index
             let destinationStart = index + 1
             var cursor = destinationStart
-            while cursor < end, bytes[cursor] != 0x3E, bytes[cursor] != 0x0A {
-                if bytes[cursor] == 0x5C, cursor + 1 < end {
+            while cursor < end, bytes[cursor] != ASCIIByte.greaterThan, bytes[cursor] != ASCIIByte.lineFeed {
+                if bytes[cursor] == ASCIIByte.backslash, cursor + 1 < end {
                     cursor += 2
                     continue
                 }
-                if bytes[cursor] == 0x3C { return nil }
+                if bytes[cursor] == ASCIIByte.lessThan { return nil }
                 cursor += 1
             }
-            guard cursor < end, bytes[cursor] == 0x3E, cursor > destinationStart else { return nil }
+            guard cursor < end, bytes[cursor] == ASCIIByte.greaterThan, cursor > destinationStart else {
+                return nil
+            }
             destination = destinationStart..<cursor
             destinationClosing = cursor
             index = cursor + 1
@@ -444,15 +456,15 @@ enum ReferenceDefinitionParser {
             var depth = 0
             while index < end {
                 let byte = bytes[index]
-                if byte == 0x5C, index + 1 < end {
+                if byte == ASCIIByte.backslash, index + 1 < end {
                     index += 2
                     continue
                 }
-                if byte == 0x20 || byte == 0x09 { break }
-                if byte <= 0x1F || byte == 0x7F { return nil }
-                if byte == 0x28 {
+                if byte.isHorizontalSpace { break }
+                if byte.isASCIIControl { return nil }
+                if byte == ASCIIByte.leftParenthesis {
                     depth += 1
-                } else if byte == 0x29 {
+                } else if byte == ASCIIByte.rightParenthesis {
                     if depth == 0 { break }
                     depth -= 1
                 }
@@ -469,10 +481,10 @@ enum ReferenceDefinitionParser {
         if index < end {
             let marker = bytes[index]
             let closingMarker: UInt8
-            if marker == 0x22 || marker == 0x27 {
+            if marker == ASCIIByte.quotationMark || marker == ASCIIByte.apostrophe {
                 closingMarker = marker
-            } else if marker == 0x28 {
-                closingMarker = 0x29
+            } else if marker == ASCIIByte.leftParenthesis {
+                closingMarker = ASCIIByte.rightParenthesis
             } else {
                 return nil
             }
@@ -480,7 +492,7 @@ enum ReferenceDefinitionParser {
             index += 1
             let titleStart = index
             while index < end, bytes[index] != closingMarker {
-                if bytes[index] == 0x5C, index + 1 < end {
+                if bytes[index] == ASCIIByte.backslash, index + 1 < end {
                     index += 2
                     continue
                 }
@@ -496,7 +508,9 @@ enum ReferenceDefinitionParser {
 
         let label = String(decoding: bytes[labelStart..<labelEnd], as: UTF8.self)
         let normalized = normalizeReferenceLabel(label)
-        guard !normalized.isEmpty, label.count <= 999 else { return nil }
+        guard !normalized.isEmpty, label.count <= MarkdownScanLimit.maximumReferenceLabelLength else {
+            return nil
+        }
         return ReferenceDefinitionParse(
             normalizedLabel: normalized,
             openingBracket: opening,
@@ -515,7 +529,7 @@ enum ReferenceDefinitionParser {
 
 private func skipHorizontalSpace(_ bytes: [UInt8], _ start: Int, _ end: Int) -> Int {
     var index = start
-    while index < end, bytes[index] == 0x20 || bytes[index] == 0x09 {
+    while index < end, bytes[index].isHorizontalSpace {
         index += 1
     }
     return index
@@ -524,7 +538,7 @@ private func skipHorizontalSpace(_ bytes: [UInt8], _ start: Int, _ end: Int) -> 
 private func isEscapedByte(_ bytes: [UInt8], _ index: Int) -> Bool {
     var slashCount = 0
     var cursor = index - 1
-    while cursor >= 0, bytes[cursor] == 0x5C {
+    while cursor >= 0, bytes[cursor] == ASCIIByte.backslash {
         slashCount += 1
         cursor -= 1
     }
@@ -539,7 +553,7 @@ private func content(_ line: TextLine, _ bytes: [UInt8]) -> ArraySlice<UInt8> {
 
 private func isBlank(_ line: TextLine, bytes: [UInt8]) -> Bool {
     for byte in content(line, bytes) {
-        if byte != 0x20 && byte != 0x09 { return false }
+        if byte != ASCIIByte.space && byte != ASCIIByte.tab { return false }
     }
     return true
 }
@@ -548,11 +562,11 @@ private func leadingWhitespace(_ slice: ArraySlice<UInt8>) -> (columns: Int, byt
     var columns = 0
     var count = 0
     for byte in slice {
-        if byte == 0x20 {
+        if byte == ASCIIByte.space {
             columns += 1
             count += 1
-        } else if byte == 0x09 {
-            columns += 4 - (columns % 4)
+        } else if byte == ASCIIByte.tab {
+            columns += MarkdownScanLimit.tabColumnWidth - (columns % MarkdownScanLimit.tabColumnWidth)
             count += 1
         } else {
             break
@@ -564,35 +578,35 @@ private func leadingWhitespace(_ slice: ArraySlice<UInt8>) -> (columns: Int, byt
 private func isHashHeading(_ line: TextLine, bytes: [UInt8]) -> Bool {
     let slice = content(line, bytes)
     let lead = leadingWhitespace(slice)
-    if lead.columns > 3 { return false }
+    if lead.columns > MarkdownScanLimit.maximumOpeningIndent { return false }
     var index = slice.startIndex + lead.bytes
     var hashes = 0
-    while index < slice.endIndex && slice[index] == 0x23 && hashes < 7 {
+    while index < slice.endIndex && slice[index] == ASCIIByte.hash && hashes < MarkdownScanLimit.maximumHeadingLevel + 1 {
         hashes += 1
         index += 1
     }
     guard (1...6).contains(hashes) else { return false }
     if index == slice.endIndex { return true }
-    return slice[index] == 0x20 || slice[index] == 0x09
+    return slice[index].isHorizontalSpace
 }
 
 private func openingFence(_ line: TextLine, bytes: [UInt8]) -> (marker: UInt8, length: Int)? {
     let slice = content(line, bytes)
     let lead = leadingWhitespace(slice)
-    if lead.columns > 3 { return nil }
+    if lead.columns > MarkdownScanLimit.maximumOpeningIndent { return nil }
     var index = slice.startIndex + lead.bytes
     guard index < slice.endIndex else { return nil }
     let marker = slice[index]
-    guard marker == 0x60 || marker == 0x7E else { return nil }
+    guard marker == ASCIIByte.backtick || marker == ASCIIByte.tilde else { return nil }
     var length = 0
     while index < slice.endIndex && slice[index] == marker {
         length += 1
         index += 1
     }
     guard length >= 3 else { return nil }
-    if marker == 0x60 {
+    if marker == ASCIIByte.backtick {
         while index < slice.endIndex {
-            if slice[index] == 0x60 { return nil }
+            if slice[index] == ASCIIByte.backtick { return nil }
             index += 1
         }
     }
@@ -602,7 +616,7 @@ private func openingFence(_ line: TextLine, bytes: [UInt8]) -> (marker: UInt8, l
 private func fenceCloser(_ line: TextLine, bytes: [UInt8], marker: UInt8, minimum: Int) -> Bool {
     let slice = content(line, bytes)
     let lead = leadingWhitespace(slice)
-    if lead.columns > 3 { return false }
+    if lead.columns > MarkdownScanLimit.maximumOpeningIndent { return false }
     var index = slice.startIndex + lead.bytes
     var length = 0
     while index < slice.endIndex && slice[index] == marker {
@@ -612,7 +626,7 @@ private func fenceCloser(_ line: TextLine, bytes: [UInt8], marker: UInt8, minimu
     guard length >= minimum else { return false }
     while index < slice.endIndex {
         let byte = slice[index]
-        if byte != 0x20 && byte != 0x09 { return false }
+        if byte != ASCIIByte.space && byte != ASCIIByte.tab { return false }
         index += 1
     }
     return true
@@ -621,17 +635,19 @@ private func fenceCloser(_ line: TextLine, bytes: [UInt8], marker: UInt8, minimu
 private func isThematic(_ line: TextLine, bytes: [UInt8]) -> Bool {
     let slice = content(line, bytes)
     let lead = leadingWhitespace(slice)
-    if lead.columns > 3 { return false }
+    if lead.columns > MarkdownScanLimit.maximumOpeningIndent { return false }
     var index = slice.startIndex + lead.bytes
     guard index < slice.endIndex else { return false }
     let marker = slice[index]
-    guard marker == 0x2A || marker == 0x2D || marker == 0x5F else { return false }
+    guard marker == ASCIIByte.asterisk || marker == ASCIIByte.hyphen || marker == ASCIIByte.underscore else {
+        return false
+    }
     var count = 0
     while index < slice.endIndex {
         let byte = slice[index]
         if byte == marker {
             count += 1
-        } else if byte != 0x20 && byte != 0x09 {
+        } else if byte != ASCIIByte.space && byte != ASCIIByte.tab {
             return false
         }
         index += 1
@@ -642,53 +658,53 @@ private func isThematic(_ line: TextLine, bytes: [UInt8]) -> Bool {
 private func underlineHeadingLevel(_ line: TextLine, bytes: [UInt8]) -> Int? {
     let slice = content(line, bytes)
     let lead = leadingWhitespace(slice)
-    if lead.columns > 3 { return nil }
+    if lead.columns > MarkdownScanLimit.maximumOpeningIndent { return nil }
     var index = slice.startIndex + lead.bytes
     guard index < slice.endIndex else { return nil }
     let marker = slice[index]
-    guard marker == 0x3D || marker == 0x2D else { return nil }
+    guard marker == ASCIIByte.equalsSign || marker == ASCIIByte.hyphen else { return nil }
     while index < slice.endIndex && slice[index] == marker {
         index += 1
     }
     while index < slice.endIndex {
         let byte = slice[index]
-        if byte != 0x20 && byte != 0x09 { return nil }
+        if byte != ASCIIByte.space && byte != ASCIIByte.tab { return nil }
         index += 1
     }
-    return marker == 0x3D ? 1 : 2
+    return marker == ASCIIByte.equalsSign ? 1 : 2
 }
 
 private func isQuote(_ line: TextLine, bytes: [UInt8]) -> Bool {
     let slice = content(line, bytes)
     let lead = leadingWhitespace(slice)
-    if lead.columns > 3 { return false }
+    if lead.columns > MarkdownScanLimit.maximumOpeningIndent { return false }
     let index = slice.startIndex + lead.bytes
-    return index < slice.endIndex && slice[index] == 0x3E
+    return index < slice.endIndex && slice[index] == ASCIIByte.greaterThan
 }
 
 private func isList(_ line: TextLine, bytes: [UInt8]) -> Bool {
     let slice = content(line, bytes)
     let lead = leadingWhitespace(slice)
-    if lead.columns > 3 { return false }
+    if lead.columns > MarkdownScanLimit.maximumOpeningIndent { return false }
     var index = slice.startIndex + lead.bytes
     guard index < slice.endIndex else { return false }
     let byte = slice[index]
-    if byte == 0x2D || byte == 0x2B || byte == 0x2A {
+    if byte == ASCIIByte.hyphen || byte == ASCIIByte.plus || byte == ASCIIByte.asterisk {
         let next = index + 1
         if next >= slice.endIndex { return true }
-        return slice[next] == 0x20 || slice[next] == 0x09
+        return slice[next].isHorizontalSpace
     }
     var digits = 0
-    while index < slice.endIndex && slice[index].isDigit && digits < 9 {
+    while index < slice.endIndex && slice[index].isASCIIDigit && digits < MarkdownScanLimit.maximumOrderedListMarkerDigits {
         digits += 1
         index += 1
     }
     guard digits > 0, index < slice.endIndex else { return false }
     let suffix = slice[index]
-    guard suffix == 0x2E || suffix == 0x29 else { return false }
+    guard suffix == ASCIIByte.period || suffix == ASCIIByte.rightParenthesis else { return false }
     let next = index + 1
     if next >= slice.endIndex { return true }
-    return slice[next] == 0x20 || slice[next] == 0x09
+    return slice[next].isHorizontalSpace
 }
 
 private func isIndentedCode(_ line: TextLine, bytes: [UInt8]) -> Bool {
@@ -697,7 +713,7 @@ private func isIndentedCode(_ line: TextLine, bytes: [UInt8]) -> Bool {
 }
 
 private func containsPipe(_ line: TextLine, bytes: [UInt8]) -> Bool {
-    content(line, bytes).contains(0x7C)
+    content(line, bytes).contains(ASCIIByte.verticalBar)
 }
 
 private func isTableDelimiter(_ line: TextLine, bytes: [UInt8]) -> Bool {
@@ -706,28 +722,28 @@ private func isTableDelimiter(_ line: TextLine, bytes: [UInt8]) -> Bool {
     var sawCell = false
     var sawPipe = false
     func skipSpace() {
-        while index < slice.endIndex && (slice[index] == 0x20 || slice[index] == 0x09) {
+        while index < slice.endIndex && (slice[index].isHorizontalSpace) {
             index += 1
         }
     }
     skipSpace()
-    if index < slice.endIndex && slice[index] == 0x7C {
+    if index < slice.endIndex && slice[index] == ASCIIByte.verticalBar {
         sawPipe = true
         index += 1
     }
     while index < slice.endIndex {
         skipSpace()
-        if index < slice.endIndex && slice[index] == 0x3A { index += 1 }
+        if index < slice.endIndex && slice[index] == ASCIIByte.colon { index += 1 }
         var dashes = 0
-        while index < slice.endIndex && slice[index] == 0x2D {
+        while index < slice.endIndex && slice[index] == ASCIIByte.hyphen {
             dashes += 1
             index += 1
         }
         if dashes == 0 { return false }
-        if index < slice.endIndex && slice[index] == 0x3A { index += 1 }
+        if index < slice.endIndex && slice[index] == ASCIIByte.colon { index += 1 }
         skipSpace()
         sawCell = true
-        if index < slice.endIndex && slice[index] == 0x7C {
+        if index < slice.endIndex && slice[index] == ASCIIByte.verticalBar {
             sawPipe = true
             index += 1
             continue
@@ -766,37 +782,41 @@ private func htmlBlockOpening(_ line: TextLine, bytes: [UInt8], paragraphContinu
     let sliceEnd = line.contentByteEnd
     var index = line.byteStart
     var columns = 0
-    while index < sliceEnd && columns <= 3 {
-        if bytes[index] == 0x20 {
+    while index < sliceEnd && columns <= MarkdownScanLimit.maximumOpeningIndent {
+        if bytes[index] == ASCIIByte.space {
             columns += 1
             index += 1
-        } else if bytes[index] == 0x09 {
-            let next = columns + (4 - (columns % 4))
-            if next > 3 { return nil }
+        } else if bytes[index] == ASCIIByte.tab {
+            let next = columns + (MarkdownScanLimit.tabColumnWidth - (columns % MarkdownScanLimit.tabColumnWidth))
+            if next > MarkdownScanLimit.maximumOpeningIndent { return nil }
             columns = next
             index += 1
         } else {
             break
         }
     }
-    if columns > 3 || index >= sliceEnd || bytes[index] != 0x3C { return nil }
+    if columns > MarkdownScanLimit.maximumOpeningIndent || index >= sliceEnd || bytes[index] != ASCIIByte.lessThan {
+        return nil
+    }
     if hasASCIIPrefix(bytes, at: index, end: sliceEnd, ascii: "<!--") { return .comment }
     if hasASCIIPrefix(bytes, at: index, end: sliceEnd, ascii: "<![CDATA[") { return .characterData }
     let afterBracket = index + 1
-    if afterBracket < sliceEnd, bytes[afterBracket] == 0x3F { return .processingInstruction }
-    if afterBracket < sliceEnd, bytes[afterBracket] == 0x21 {
+    if afterBracket < sliceEnd, bytes[afterBracket] == ASCIIByte.questionMark {
+        return .processingInstruction
+    }
+    if afterBracket < sliceEnd, bytes[afterBracket] == ASCIIByte.exclamationMark {
         let letterIndex = afterBracket + 1
         if letterIndex < sliceEnd, bytes[letterIndex].isASCIILetter { return .declaration }
         return nil
     }
 
     var nameStart = afterBracket
-    if nameStart < sliceEnd, bytes[nameStart] == 0x2F { nameStart += 1 }
+    if nameStart < sliceEnd, bytes[nameStart] == ASCIIByte.slash { nameStart += 1 }
     guard nameStart < sliceEnd, bytes[nameStart].isASCIILetter else { return nil }
     var nameEnd = nameStart + 1
     while nameEnd < sliceEnd {
         let byte = bytes[nameEnd]
-        if byte.isASCIILetter || byte.isDigit || byte == 0x2D {
+        if byte.isASCIILetter || byte.isASCIIDigit || byte == ASCIIByte.hyphen {
             nameEnd += 1
         } else {
             break
@@ -816,9 +836,9 @@ private func htmlBlockOpening(_ line: TextLine, bytes: [UInt8], paragraphContinu
 private func tagBoundaryFollows(_ bytes: [UInt8], _ index: Int, _ end: Int) -> Bool {
     if index >= end { return true }
     let byte = bytes[index]
-    if byte == 0x20 || byte == 0x09 || byte == 0x3E { return true }
-    if byte == 0x2F {
-        return index + 1 == end || bytes[index + 1] == 0x3E || bytes[index + 1] == 0x20 || bytes[index + 1] == 0x09
+    if byte.isHorizontalSpace || byte == ASCIIByte.greaterThan { return true }
+    if byte == ASCIIByte.slash {
+        return index + 1 == end || bytes[index + 1] == ASCIIByte.greaterThan || bytes[index + 1].isHorizontalSpace
     }
     return false
 }
@@ -826,12 +846,12 @@ private func tagBoundaryFollows(_ bytes: [UInt8], _ index: Int, _ end: Int) -> B
 private func completeHTMLTag(_ bytes: [UInt8], tagStart: Int, lineEnd: Int) -> Bool {
     var index = tagStart + 1
     guard index < lineEnd else { return false }
-    if bytes[index] == 0x2F { index += 1 }
+    if bytes[index] == ASCIIByte.slash { index += 1 }
     guard index < lineEnd, bytes[index].isASCIILetter else { return false }
     index += 1
     while index < lineEnd {
         let byte = bytes[index]
-        if byte.isASCIILetter || byte.isDigit || byte == 0x2D {
+        if byte.isASCIILetter || byte.isASCIIDigit || byte == ASCIIByte.hyphen {
             index += 1
         } else {
             break
@@ -841,7 +861,7 @@ private func completeHTMLTag(_ bytes: [UInt8], tagStart: Int, lineEnd: Int) -> B
     while index < lineEnd {
         let byte = bytes[index]
         if let openQuote = quote {
-            if byte == 0x5C, index + 1 < lineEnd {
+            if byte == ASCIIByte.backslash, index + 1 < lineEnd {
                 index += 2
                 continue
             }
@@ -849,15 +869,15 @@ private func completeHTMLTag(_ bytes: [UInt8], tagStart: Int, lineEnd: Int) -> B
             index += 1
             continue
         }
-        if byte == 0x22 || byte == 0x27 {
+        if byte == ASCIIByte.quotationMark || byte == ASCIIByte.apostrophe {
             quote = byte
             index += 1
             continue
         }
-        if byte == 0x3E {
+        if byte == ASCIIByte.greaterThan {
             index += 1
             while index < lineEnd {
-                if bytes[index] != 0x20 && bytes[index] != 0x09 { return false }
+                if bytes[index] != ASCIIByte.space && bytes[index] != ASCIIByte.tab { return false }
                 index += 1
             }
             return true
@@ -926,13 +946,7 @@ private func asciiLowercased(_ bytes: [UInt8], _ start: Int, _ end: Int) -> Stri
 }
 
 private func asciiLower(_ byte: UInt8) -> UInt8 {
-    if byte >= 0x41 && byte <= 0x5A { return byte + 0x20 }
+    let uppercaseToLowercase = ASCIIByte.lowercaseA - ASCIIByte.uppercaseA
+    if byte.isASCIILetter, byte <= ASCIIByte.uppercaseZ { return byte + uppercaseToLowercase }
     return byte
-}
-
-private extension UInt8 {
-    var isDigit: Bool { self >= 0x30 && self <= 0x39 }
-    var isASCIILetter: Bool {
-        (self >= 0x41 && self <= 0x5A) || (self >= 0x61 && self <= 0x7A)
-    }
 }
