@@ -386,7 +386,82 @@ struct ReferenceDefinitionParse: Equatable {
 enum ReferenceDefinitionParser {
     static func parseLine(bytes: [UInt8], line: TextLine) -> ReferenceDefinitionParse? {
         let end = line.contentByteEnd
-        var index = line.byteStart
+        guard let label = scanLabel(bytes: bytes, line: line) else { return nil }
+        guard let destination = scanDestination(bytes: bytes, from: label.indexAfterColon, end: end) else { return nil }
+        guard let title = scanTitle(bytes: bytes, from: destination.indexAfter, end: end) else { return nil }
+        let labelText = String(decoding: bytes[label.range], as: UTF8.self)
+        let normalized = normalizeReferenceLabel(labelText)
+        guard !normalized.isEmpty, labelText.count <= MarkdownScanLimit.maximumReferenceLabelLength else { return nil }
+        return ReferenceDefinitionParse(
+            normalizedLabel: normalized,
+            openingBracket: label.openingBracket,
+            label: label.range,
+            closingBracket: label.closingBracket,
+            colon: label.colon,
+            destination: destination.range,
+            destinationOpening: destination.opening,
+            destinationClosing: destination.closing,
+            title: title.range,
+            titleOpening: title.opening,
+            titleClosing: title.closing
+        )
+    }
+
+    private struct LabelScan {
+        var openingBracket: Int
+        var range: Range<Int>
+        var closingBracket: Int
+        var colon: Int
+        var indexAfterColon: Int
+    }
+
+    private struct DestinationScan {
+        var range: Range<Int>
+        var opening: Int?
+        var closing: Int?
+        var indexAfter: Int
+    }
+
+    private struct TitleScan {
+        var range: Range<Int>?
+        var opening: Int?
+        var closing: Int?
+    }
+
+    private static func scanLabel(bytes: [UInt8], line: TextLine) -> LabelScan? {
+        let end = line.contentByteEnd
+        guard let index = indexAfterOpeningIndent(bytes: bytes, from: line.byteStart, end: end) else { return nil }
+        guard index < end, bytes[index] == ASCIIByte.leftBracket, !isEscapedByte(bytes, index) else { return nil }
+        let opening = index
+        var cursor = index + 1
+        let labelStart = cursor
+        while cursor < end {
+            if bytes[cursor] == ASCIIByte.backslash, cursor + 1 < end {
+                cursor += 2
+                continue
+            }
+            if bytes[cursor] == ASCIIByte.leftBracket || bytes[cursor] == ASCIIByte.lineFeed { return nil }
+            if bytes[cursor] == ASCIIByte.rightBracket { break }
+            cursor += 1
+        }
+        guard cursor < end, bytes[cursor] == ASCIIByte.rightBracket else { return nil }
+        let labelEnd = cursor
+        guard labelEnd > labelStart, labelEnd - labelStart <= MarkdownScanLimit.maximumReferenceLabelLength else {
+            return nil
+        }
+        let colon = cursor + 1
+        guard colon < end, bytes[colon] == ASCIIByte.colon else { return nil }
+        return LabelScan(
+            openingBracket: opening,
+            range: labelStart..<labelEnd,
+            closingBracket: cursor,
+            colon: colon,
+            indexAfterColon: colon + 1
+        )
+    }
+
+    private static func indexAfterOpeningIndent(bytes: [UInt8], from start: Int, end: Int) -> Int? {
+        var index = start
         var columns = 0
         while index < end && columns <= MarkdownScanLimit.maximumOpeningIndent {
             if bytes[index] == ASCIIByte.space {
@@ -402,128 +477,89 @@ enum ReferenceDefinitionParser {
             }
         }
         if columns > MarkdownScanLimit.maximumOpeningIndent { return nil }
-        guard index < end, bytes[index] == ASCIIByte.leftBracket, !isEscapedByte(bytes, index) else {
+        return index
+    }
+
+    private static func scanDestination(bytes: [UInt8], from start: Int, end: Int) -> DestinationScan? {
+        let index = skipHorizontalSpace(bytes, start, end)
+        guard index < end else { return nil }
+        if bytes[index] == ASCIIByte.lessThan {
+            return scanAngleBracketDestination(bytes: bytes, from: index, end: end)
+        }
+        return scanBareDestination(bytes: bytes, from: index, end: end)
+    }
+
+    private static func scanAngleBracketDestination(bytes: [UInt8], from start: Int, end: Int) -> DestinationScan? {
+        let destinationStart = start + 1
+        var cursor = destinationStart
+        while cursor < end, bytes[cursor] != ASCIIByte.greaterThan, bytes[cursor] != ASCIIByte.lineFeed {
+            if bytes[cursor] == ASCIIByte.backslash, cursor + 1 < end {
+                cursor += 2
+                continue
+            }
+            if bytes[cursor] == ASCIIByte.lessThan { return nil }
+            cursor += 1
+        }
+        guard cursor < end, bytes[cursor] == ASCIIByte.greaterThan, cursor > destinationStart else { return nil }
+        return DestinationScan(
+            range: destinationStart..<cursor,
+            opening: start,
+            closing: cursor,
+            indexAfter: cursor + 1
+        )
+    }
+
+    private static func scanBareDestination(bytes: [UInt8], from start: Int, end: Int) -> DestinationScan? {
+        var index = start
+        var depth = 0
+        while index < end {
+            let byte = bytes[index]
+            if byte == ASCIIByte.backslash, index + 1 < end {
+                index += 2
+                continue
+            }
+            if byte.isHorizontalSpace { break }
+            if byte.isASCIIControl { return nil }
+            if byte == ASCIIByte.leftParenthesis {
+                depth += 1
+            } else if byte == ASCIIByte.rightParenthesis {
+                if depth == 0 { break }
+                depth -= 1
+            }
+            index += 1
+        }
+        guard index > start, depth == 0 else { return nil }
+        return DestinationScan(range: start..<index, opening: nil, closing: nil, indexAfter: index)
+    }
+
+    private static func scanTitle(bytes: [UInt8], from start: Int, end: Int) -> TitleScan? {
+        var index = skipHorizontalSpace(bytes, start, end)
+        guard index < end else { return TitleScan(range: nil, opening: nil, closing: nil) }
+        let marker = bytes[index]
+        let closingMarker: UInt8
+        if marker == ASCIIByte.quotationMark || marker == ASCIIByte.apostrophe {
+            closingMarker = marker
+        } else if marker == ASCIIByte.leftParenthesis {
+            closingMarker = ASCIIByte.rightParenthesis
+        } else {
             return nil
         }
         let opening = index
         index += 1
-        let labelStart = index
-        while index < end {
+        let titleStart = index
+        while index < end, bytes[index] != closingMarker {
             if bytes[index] == ASCIIByte.backslash, index + 1 < end {
                 index += 2
                 continue
             }
-            if bytes[index] == ASCIIByte.leftBracket || bytes[index] == ASCIIByte.lineFeed { return nil }
-            if bytes[index] == ASCIIByte.rightBracket { break }
             index += 1
         }
-        guard index < end, bytes[index] == ASCIIByte.rightBracket else { return nil }
-        let labelEnd = index
-        let closing = index
-        guard labelEnd > labelStart, labelEnd - labelStart <= MarkdownScanLimit.maximumReferenceLabelLength else {
-            return nil
-        }
-        index += 1
-        guard index < end, bytes[index] == ASCIIByte.colon else { return nil }
-        let colon = index
+        guard index < end, bytes[index] == closingMarker else { return nil }
+        let titleEnd = index
         index += 1
         index = skipHorizontalSpace(bytes, index, end)
-        guard index < end else { return nil }
-
-        var destination: Range<Int>
-        var destinationOpening: Int?
-        var destinationClosing: Int?
-        if bytes[index] == ASCIIByte.lessThan {
-            destinationOpening = index
-            let destinationStart = index + 1
-            var cursor = destinationStart
-            while cursor < end, bytes[cursor] != ASCIIByte.greaterThan, bytes[cursor] != ASCIIByte.lineFeed {
-                if bytes[cursor] == ASCIIByte.backslash, cursor + 1 < end {
-                    cursor += 2
-                    continue
-                }
-                if bytes[cursor] == ASCIIByte.lessThan { return nil }
-                cursor += 1
-            }
-            guard cursor < end, bytes[cursor] == ASCIIByte.greaterThan, cursor > destinationStart else {
-                return nil
-            }
-            destination = destinationStart..<cursor
-            destinationClosing = cursor
-            index = cursor + 1
-        } else {
-            let destinationStart = index
-            var depth = 0
-            while index < end {
-                let byte = bytes[index]
-                if byte == ASCIIByte.backslash, index + 1 < end {
-                    index += 2
-                    continue
-                }
-                if byte.isHorizontalSpace { break }
-                if byte.isASCIIControl { return nil }
-                if byte == ASCIIByte.leftParenthesis {
-                    depth += 1
-                } else if byte == ASCIIByte.rightParenthesis {
-                    if depth == 0 { break }
-                    depth -= 1
-                }
-                index += 1
-            }
-            guard index > destinationStart, depth == 0 else { return nil }
-            destination = destinationStart..<index
-        }
-
-        index = skipHorizontalSpace(bytes, index, end)
-        var title: Range<Int>?
-        var titleOpening: Int?
-        var titleClosing: Int?
-        if index < end {
-            let marker = bytes[index]
-            let closingMarker: UInt8
-            if marker == ASCIIByte.quotationMark || marker == ASCIIByte.apostrophe {
-                closingMarker = marker
-            } else if marker == ASCIIByte.leftParenthesis {
-                closingMarker = ASCIIByte.rightParenthesis
-            } else {
-                return nil
-            }
-            titleOpening = index
-            index += 1
-            let titleStart = index
-            while index < end, bytes[index] != closingMarker {
-                if bytes[index] == ASCIIByte.backslash, index + 1 < end {
-                    index += 2
-                    continue
-                }
-                index += 1
-            }
-            guard index < end, bytes[index] == closingMarker else { return nil }
-            title = titleStart..<index
-            titleClosing = index
-            index += 1
-            index = skipHorizontalSpace(bytes, index, end)
-            guard index == end else { return nil }
-        }
-
-        let label = String(decoding: bytes[labelStart..<labelEnd], as: UTF8.self)
-        let normalized = normalizeReferenceLabel(label)
-        guard !normalized.isEmpty, label.count <= MarkdownScanLimit.maximumReferenceLabelLength else {
-            return nil
-        }
-        return ReferenceDefinitionParse(
-            normalizedLabel: normalized,
-            openingBracket: opening,
-            label: labelStart..<labelEnd,
-            closingBracket: closing,
-            colon: colon,
-            destination: destination,
-            destinationOpening: destinationOpening,
-            destinationClosing: destinationClosing,
-            title: title,
-            titleOpening: titleOpening,
-            titleClosing: titleClosing
-        )
+        guard index == end else { return nil }
+        return TitleScan(range: titleStart..<titleEnd, opening: opening, closing: titleEnd)
     }
 }
 
@@ -535,7 +571,7 @@ private func skipHorizontalSpace(_ bytes: [UInt8], _ start: Int, _ end: Int) -> 
     return index
 }
 
-private func isEscapedByte(_ bytes: [UInt8], _ index: Int) -> Bool {
+func isEscapedByte(_ bytes: [UInt8], _ index: Int) -> Bool {
     var slashCount = 0
     var cursor = index - 1
     while cursor >= 0, bytes[cursor] == ASCIIByte.backslash {

@@ -155,6 +155,34 @@ final class HighlighterTests: XCTestCase {
         XCTAssertEqual(content(folded, role: .link), ["Foo   Bar", "/url", "foo bar"])
     }
 
+    func testReferenceDefinitionParserReadsLabelDestinationAndTitle() throws {
+        func parse(_ source: String) -> ReferenceDefinitionParse? {
+            let bytes = Array(source.utf8)
+            let lines = DocumentBuffer.lines(in: bytes)
+            return ReferenceDefinitionParser.parseLine(bytes: bytes, line: lines[0])
+        }
+        func slice(_ source: String, _ range: Range<Int>) -> String {
+            String(decoding: Array(source.utf8)[range], as: UTF8.self)
+        }
+
+        let angle = "[example]: <https://example.com>"
+        let parsedAngle = try XCTUnwrap(parse(angle))
+        XCTAssertEqual(parsedAngle.normalizedLabel, "example")
+        XCTAssertEqual(slice(angle, parsedAngle.destination), "https://example.com")
+        XCTAssertNotNil(parsedAngle.destinationOpening)
+        XCTAssertNil(parsedAngle.title)
+
+        let titled = "[example]: /url (Title)"
+        let parsedTitle = try XCTUnwrap(parse(titled))
+        XCTAssertEqual(slice(titled, parsedTitle.destination), "/url")
+        XCTAssertEqual(parsedTitle.title.map { slice(titled, $0) }, "Title")
+        XCTAssertEqual(parsedTitle.titleOpening.map { slice(titled, $0..<$0 + 1) }, "(")
+
+        XCTAssertNil(parse("[example] https://example.com"))
+        XCTAssertNil(parse("[" + String(repeating: "a", count: MarkdownScanLimit.maximumReferenceLabelLength + 1) + "]: /url"))
+        XCTAssertNil(parse("[example]: <>"))
+    }
+
     func testInlineHTMLAndHTMLBlocks() {
         let inline = "Use <em>word</em> and <!-- note --> here."
         XCTAssertEqual(content(inline, role: .html), ["em", "em", " note "])

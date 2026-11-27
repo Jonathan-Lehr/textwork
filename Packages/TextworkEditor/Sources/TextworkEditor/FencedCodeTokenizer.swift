@@ -274,48 +274,14 @@ private func scanSwift(
             continue
         }
         if isIdentifierStart(byte) {
-            let start = index
-            index = consumeIdentifier(bytes, from: index, limit: limit)
-            let word = String(decoding: bytes[start..<index], as: UTF8.self)
-            let followsDot = identifierFollowsDot(bytes, start: start, lineStart: range.lowerBound)
-            if swiftKeywords.contains(word) {
-                appendToken(start..<index, role: .codeKeyword, into: &tokens)
-                noteSwiftKeyword(word, state: &state)
-            } else if state.awaitingFunctionName {
-                state.awaitingFunctionName = false
-                state.awaitingPropertyName = false
-                state.awaitingLocalName = false
-                if state.scopes.last?.kind == .typeBody { recordFunction(word, state: &state) }
-            } else if state.awaitingPropertyName {
-                state.awaitingPropertyName = false
-                recordProperty(word, state: &state)
-                appendToken(start..<index, role: .codeMember, into: &tokens)
-            } else if state.scanningParameterList, !isTypeName(word, firstByte: byte) {
-                state.pendingParameterNames.insert(word)
-            } else if isClosureParameter(word, bytes: bytes, end: index, limit: limit, state: state) {
-                recordLocal(word, state: &state)
-            } else if state.awaitingLocalName {
-                state.awaitingLocalName = false
-                recordLocal(word, state: &state)
-            } else if isSystemTypeName(word) {
-                appendToken(start..<index, role: .codeSystemType, into: &tokens)
-            } else if byte >= ASCIIByte.uppercaseA && byte <= ASCIIByte.uppercaseZ {
-                appendToken(start..<index, role: .codeType, into: &tokens)
-            } else if followsDot {
-                let role: HighlightRole = declaredTypeMember(word, state: state) ? .codeMember : .codeOtherMember
-                appendToken(start..<index, role: role, into: &tokens)
-            } else if localNameShadowsProperty(word, state: state) {
-                // A local or parameter hides the property, so this use stays plain.
-            } else if barePropertyReference(word, state: state) {
-                appendToken(start..<index, role: .codeMember, into: &tokens)
-            } else if insideTypeBody(state),
-                      assignmentFollows(bytes, end: index, limit: limit) {
-                recordProperty(word, state: &state)
-                appendToken(start..<index, role: .codeMember, into: &tokens)
-            } else if identifierPrecedesParenthesis(bytes, end: index, limit: limit) {
-                let role: HighlightRole = declaredTypeFunction(word, state: state) ? .codeMember : .codeOtherMember
-                appendToken(start..<index, role: role, into: &tokens)
-            }
+            index = colorSwiftIdentifier(
+                bytes: bytes,
+                from: index,
+                limit: limit,
+                lineStart: range.lowerBound,
+                state: &state,
+                into: &tokens
+            )
             continue
         }
         if byte != ASCIIByte.space && byte != ASCIIByte.tab && byte != ASCIIByte.lineFeed && byte != ASCIIByte.carriageReturn {
@@ -324,6 +290,58 @@ private func scanSwift(
         }
         index += DocumentBuffer.scalarWidth(bytes, index).0
     }
+}
+
+private func colorSwiftIdentifier(
+    bytes: [UInt8],
+    from start: Int,
+    limit: Int,
+    lineStart: Int,
+    state: inout FencedCodeScanState,
+    into tokens: inout [FencedCodeToken]
+) -> Int {
+    let end = consumeIdentifier(bytes, from: start, limit: limit)
+    let word = String(decoding: bytes[start..<end], as: UTF8.self)
+    let firstByte = bytes[start]
+    let followsDot = identifierFollowsDot(bytes, start: start, lineStart: lineStart)
+    if swiftKeywords.contains(word) {
+        appendToken(start..<end, role: .codeKeyword, into: &tokens)
+        noteSwiftKeyword(word, state: &state)
+    } else if state.awaitingFunctionName {
+        state.awaitingFunctionName = false
+        state.awaitingPropertyName = false
+        state.awaitingLocalName = false
+        if state.scopes.last?.kind == .typeBody { recordFunction(word, state: &state) }
+    } else if state.awaitingPropertyName {
+        state.awaitingPropertyName = false
+        recordProperty(word, state: &state)
+        appendToken(start..<end, role: .codeMember, into: &tokens)
+    } else if state.scanningParameterList, !isTypeName(word, firstByte: firstByte) {
+        state.pendingParameterNames.insert(word)
+    } else if isClosureParameter(word, bytes: bytes, end: end, limit: limit, state: state) {
+        recordLocal(word, state: &state)
+    } else if state.awaitingLocalName {
+        state.awaitingLocalName = false
+        recordLocal(word, state: &state)
+    } else if isSystemTypeName(word) {
+        appendToken(start..<end, role: .codeSystemType, into: &tokens)
+    } else if firstByte >= ASCIIByte.uppercaseA && firstByte <= ASCIIByte.uppercaseZ {
+        appendToken(start..<end, role: .codeType, into: &tokens)
+    } else if followsDot {
+        let role: HighlightRole = declaredTypeMember(word, state: state) ? .codeMember : .codeOtherMember
+        appendToken(start..<end, role: role, into: &tokens)
+    } else if localNameShadowsProperty(word, state: state) {
+        // A local or parameter hides the property, so this use stays plain.
+    } else if barePropertyReference(word, state: state) {
+        appendToken(start..<end, role: .codeMember, into: &tokens)
+    } else if insideTypeBody(state), assignmentFollows(bytes, end: end, limit: limit) {
+        recordProperty(word, state: &state)
+        appendToken(start..<end, role: .codeMember, into: &tokens)
+    } else if identifierPrecedesParenthesis(bytes, end: end, limit: limit) {
+        let role: HighlightRole = declaredTypeFunction(word, state: state) ? .codeMember : .codeOtherMember
+        appendToken(start..<end, role: role, into: &tokens)
+    }
+    return end
 }
 
 private func scanJSON(

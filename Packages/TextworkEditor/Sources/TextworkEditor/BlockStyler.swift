@@ -1160,12 +1160,6 @@ private func runLength(_ bytes: [UInt8], _ start: Int, marker: UInt8, limit: Int
 }
 
 private func isEscaped(_ bytes: [UInt8], _ index: Int) -> Bool {
-    var slashCount = 0
-    var cursor = index - 1
-    while cursor >= 0 && bytes[cursor] == ASCIIByte.backslash {
-        slashCount += 1
-        cursor -= 1
-    }
-    return slashCount % 2 == 1
+    isEscapedByte(bytes, index)
 }
 
