@@ -9,6 +9,7 @@ struct TextworkApp: App {
         #if os(macOS)
         .commands {
             MarkdownGuideCommands()
+            DocumentExportCommands()
         }
         #endif
         #if os(macOS)
