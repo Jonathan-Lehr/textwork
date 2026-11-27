@@ -1,5 +1,3 @@
-import Foundation
-
 /// A language the fenced-code tokenizer knows.
 enum FencedCodeLanguage: Equatable, Sendable {
     case swift

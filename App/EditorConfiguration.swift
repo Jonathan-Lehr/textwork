@@ -1,5 +1,4 @@
 import CoreGraphics
-import Foundation
 import TextworkEditor
 
 /// Typography the editor shows.

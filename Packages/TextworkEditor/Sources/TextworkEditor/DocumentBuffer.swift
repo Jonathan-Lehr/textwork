@@ -363,25 +363,6 @@ enum DocumentBuffer {
         return byteIndex
     }
 
-    static func lineIndex(containingUTF16 target: Int, lines: [TextLine]) -> Int {
-        if lines.isEmpty { return 0 }
-        if target <= 0 { return 0 }
-        var low = 0
-        var high = lines.count
-        while low + 1 < high {
-            let mid = (low + high) / 2
-            if lines[mid].utf16Start <= target {
-                low = mid
-            } else {
-                high = mid
-            }
-        }
-        if low < lines.count - 1 && target >= lines[low].utf16End {
-            return low + 1
-        }
-        return low
-    }
-
     static func scalarWidth(_ bytes: [UInt8], _ index: Int) -> (Int, Int) {
         guard index < bytes.count else { return (0, 0) }
         let byte = bytes[index]

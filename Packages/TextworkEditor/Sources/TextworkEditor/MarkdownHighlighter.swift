@@ -57,7 +57,6 @@ public struct MarkdownHighlighter: Sendable {
             structures: structures,
             ranges: ranges,
             bytes: bytes,
-            lines: lines,
             previous: previous,
             editByteStart: editByteStart,
             editByteEnd: editByteEnd,
@@ -161,7 +160,6 @@ public struct MarkdownHighlighter: Sendable {
         structures: [(start: Int, end: Int, kind: StructureKind)],
         ranges: [Range<Int>],
         bytes: [UInt8],
-        lines: [TextLine],
         previous: HighlightSnapshot?,
         editByteStart: Int,
         editByteEnd: Int,
@@ -201,7 +199,6 @@ public struct MarkdownHighlighter: Sendable {
             oldEnd -= 1
             newEnd -= 1
         }
-        _ = lines
         return reused
     }
 
