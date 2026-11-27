@@ -11,5 +11,10 @@ struct TextworkApp: App {
             MarkdownGuideCommands()
         }
         #endif
+        #if os(macOS)
+        Settings {
+            AppearanceSettingsPane()
+        }
+        #endif
     }
 }

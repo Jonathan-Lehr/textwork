@@ -196,7 +196,7 @@ extension UIFont {
         return UIFont.menlo(ofSize: pointSize, bold: bold, italic: italic)
     }
 
-    private func addingSymbolicTrait(_ trait: UIFontDescriptor.SymbolicTraits) -> UIFont {
+    fileprivate func addingSymbolicTrait(_ trait: UIFontDescriptor.SymbolicTraits) -> UIFont {
         var traits = fontDescriptor.symbolicTraits
         traits.insert(trait)
         guard let descriptor = fontDescriptor.withSymbolicTraits(traits) else { return self }
