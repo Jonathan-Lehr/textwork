@@ -2,6 +2,13 @@
 
 Textwork is a native Markdown editor. macOS is the primary design target, then iPad. iPhone is last.
 
+## Goals
+
+- Simplicity, clarity, and modularity, with an emphasis on human readability and maintainability
+- Correctness
+- Security
+- Reusability
+
 ## Product rules
 
 - The interface is native SwiftUI. Where SwiftUI cannot do the job, wrap TextKit 2 (`NSTextView` on Mac, `UITextView` on iPad and iPhone). Do not add a custom editor toolkit.
@@ -14,6 +21,35 @@ Textwork is a native Markdown editor. macOS is the primary design target, then i
 ## Names
 
 Spell names out. Do not abbreviate type names, function names, or enum cases. Write `punctuation`, not `punct`. Widely used standard names are fine: UTF-16, URL, HTML, PDF, and Markdown syntax names that readers already know.
+
+## Style
+
+- Indent with four spaces. Do not use tab characters.
+- Name a number whose meaning is not obvious from the surrounding code. Put it in a static constant on the type that owns it, or in a small enum of related constants. Leave `0`, `1`, and an obvious offset written inline.
+- Prefer a one-line `case` when the case body is a single short statement. A case with more than one statement stays on multiple lines:
+
+```swift
+switch style.fontTreatment {
+case .body: font = configuration.bodyFont()
+case .monospaced: font = configuration.monospacedFont()
+case .boldMonospaced: font = configuration.boldFont(ofSize: configuration.resolvedFontSize)
+case .heading:
+    let size = configuration.resolvedFontSize + headingBoost(span.role)
+    font = configuration.boldFont(ofSize: size)
+case .emphasis: font = font.addingItalic()
+case .strong: font = font.addingBold()
+}
+```
+
+- Prefer a one-line `if` or `guard` when the condition and a single short body fit comfortably on one line. The body is a `return`, `break`, `continue`, assignment, or call. A multi-statement body stays expanded. An `if`/`else` chain that reads more clearly on several lines stays expanded. A line that would run long stays expanded:
+
+```swift
+static func fontSource(fontName: String?, nameIsAvailable: Bool) -> EditorFontSource {
+    if let fontName, nameIsAvailable { return .named(fontName) }
+    if fontName == menloFontName { return .systemMonospaced }
+    return .system
+}
+```
 
 ## Layout
 

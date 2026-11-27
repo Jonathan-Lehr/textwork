@@ -4,7 +4,7 @@ Textwork is a native, open-source Markdown editor. macOS comes first, then iPad.
 
 The license is MIT. See [LICENSE](LICENSE).
 
-This repository is the project skeleton plus a syntax-highlighting spike. The product plan is in [ROADMAP.md](ROADMAP.md). Rules for changing the code are in [AGENTS.md](AGENTS.md).
+This repository is the project skeleton plus a syntax-highlighting spike. The product plan is in [ROADMAP.md](ROADMAP.md). Rules for changing the code, including the quality goals and the Swift style, are in [AGENTS.md](AGENTS.md).
 
 ## Requirements
 

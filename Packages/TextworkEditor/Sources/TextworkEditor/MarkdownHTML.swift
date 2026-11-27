@@ -186,16 +186,10 @@ public struct MarkdownHTMLRenderer: Sendable {
     /// Resolves a preview image or link path and refuses anything outside `directory`.
     public static func fileURL(forPreviewPath path: String, in directory: URL) -> URL? {
         var relative = path
-        if relative.hasPrefix("/") {
-            relative.removeFirst()
-        }
-        if relative.isEmpty || relative.contains("\0") {
-            return nil
-        }
+        if relative.hasPrefix("/") { relative.removeFirst() }
+        if relative.isEmpty || relative.contains("\0") { return nil }
         let parts = relative.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
-        if parts.isEmpty || parts.contains(where: { $0 == "." || $0 == ".." }) {
-            return nil
-        }
+        if parts.isEmpty || parts.contains(where: { $0 == "." || $0 == ".." }) { return nil }
         let root = directory.standardizedFileURL
         var candidate = root
         for part in parts {
@@ -213,8 +207,7 @@ public struct MarkdownHTMLRenderer: Sendable {
 
     private func emitBlock(_ block: MarkdownBlock, unwrapParagraphs: Bool) -> String {
         switch block {
-        case .heading(let level, let inlines):
-            return "<h\(level)>\(emitInlines(inlines))</h\(level)>"
+        case .heading(let level, let inlines): return "<h\(level)>\(emitInlines(inlines))</h\(level)>"
         case .paragraph(let inlines):
             let inner = emitInlines(inlines)
             return unwrapParagraphs ? inner : "<p>\(inner)</p>"
@@ -230,9 +223,7 @@ public struct MarkdownHTMLRenderer: Sendable {
         case .list(let orderedStart, let tight, let items):
             let tag = orderedStart == nil ? "ul" : "ol"
             var opening = "<\(tag)"
-            if let orderedStart, orderedStart != 1 {
-                opening += " start=\"\(orderedStart)\""
-            }
+            if let orderedStart, orderedStart != 1 { opening += " start=\"\(orderedStart)\"" }
             opening += ">"
             let body = items.map { emitItem($0, unwrapParagraphs: tight) }.joined(separator: "\n")
             return "\(opening)\n\(body)\n</\(tag)>"
@@ -253,16 +244,13 @@ public struct MarkdownHTMLRenderer: Sendable {
                         html += "<td\(alignmentAttribute(alignment))>\(emitInlines(source))</td>"
                     }
                     html += "</tr>"
-                    if rowIndex != rows.count - 1 {
-                        html += "\n"
-                    }
+                    if rowIndex != rows.count - 1 { html += "\n" }
                 }
                 html += "\n</tbody>"
             }
             html += "\n</table>"
             return html
-        case .thematicBreak:
-            return "<hr>"
+        case .thematicBreak: return "<hr>"
         }
     }
 
@@ -279,14 +267,10 @@ public struct MarkdownHTMLRenderer: Sendable {
 
     private func alignmentAttribute(_ alignment: MarkdownTableAlignment) -> String {
         switch alignment {
-        case .none:
-            return ""
-        case .left:
-            return " style=\"text-align: left\""
-        case .center:
-            return " style=\"text-align: center\""
-        case .right:
-            return " style=\"text-align: right\""
+        case .none: return ""
+        case .left: return " style=\"text-align: left\""
+        case .center: return " style=\"text-align: center\""
+        case .right: return " style=\"text-align: right\""
         }
     }
 
@@ -296,18 +280,12 @@ public struct MarkdownHTMLRenderer: Sendable {
 
     private func emitInline(_ inline: MarkdownInline) -> String {
         switch inline {
-        case .text(let text):
-            return escapeText(text)
-        case .softBreak:
-            return "\n"
-        case .hardBreak:
-            return "<br>"
-        case .code(let code):
-            return "<code>\(escapeRaw(code))</code>"
-        case .emphasis(let children):
-            return "<em>\(emitInlines(children))</em>"
-        case .strong(let children):
-            return "<strong>\(emitInlines(children))</strong>"
+        case .text(let text): return escapeText(text)
+        case .softBreak: return "\n"
+        case .hardBreak: return "<br>"
+        case .code(let code): return "<code>\(escapeRaw(code))</code>"
+        case .emphasis(let children): return "<em>\(emitInlines(children))</em>"
+        case .strong(let children): return "<strong>\(emitInlines(children))</strong>"
         case .link(let destination, let title, let children):
             let inner = emitInlines(children)
             guard let href = linkHref(destination) else { return inner }
@@ -316,9 +294,7 @@ public struct MarkdownHTMLRenderer: Sendable {
             }
             return "<a href=\"\(href)\">\(inner)</a>"
         case .image(let destination, let alternativeText):
-            guard let source = imageSource(destination) else {
-                return escapeText(alternativeText)
-            }
+            guard let source = imageSource(destination) else { return escapeText(alternativeText) }
             return "<img src=\"\(source)\" alt=\"\(escapeAttribute(decodeEntities(alternativeText)))\">"
         case .unresolvedReference(let match):
             return escapeText(match.opening) + emitInlines(match.children) + escapeText(match.closing)
@@ -333,14 +309,15 @@ public struct MarkdownHTMLRenderer: Sendable {
 
     private func imageSource(_ destination: String) -> String? {
         let decoded = decodeEntities(destination.trimmingCharacters(in: .whitespacesAndNewlines))
-        guard !decoded.isEmpty, !containsControlCharacter(decoded), !decoded.hasPrefix("//") else { return nil }
+        guard !decoded.isEmpty, !containsControlCharacter(decoded), !decoded.hasPrefix("//") else {
+            return nil
+        }
         if let scheme = urlScheme(decoded) {
             guard scheme == "http" || scheme == "https" else { return nil }
             return escapeAttribute(decoded)
         }
         switch imageAddressing {
-        case .authored:
-            return escapeAttribute(decoded)
+        case .authored: return escapeAttribute(decoded)
         case .preview:
             let relative = decoded.hasPrefix("/") ? String(decoded.dropFirst()) : decoded
             guard !relative.isEmpty, !relative.hasPrefix("/") else { return nil }
@@ -377,20 +354,13 @@ func escapeRaw(_ string: String) -> String {
     result.reserveCapacity(string.count)
     for character in string {
         switch character {
-        case "&":
-            result.append("&amp;")
-        case "<":
-            result.append("&lt;")
-        case ">":
-            result.append("&gt;")
-        case "\"":
-            result.append("&quot;")
-        case "'":
-            result.append("&#39;")
-        case "\0":
-            result.append("\u{FFFD}")
-        default:
-            result.append(character)
+        case "&": result.append("&amp;")
+        case "<": result.append("&lt;")
+        case ">": result.append("&gt;")
+        case "\"": result.append("&quot;")
+        case "'": result.append("&#39;")
+        case "\0": result.append("\u{FFFD}")
+        default: result.append(character)
         }
     }
     return result
@@ -429,12 +399,10 @@ private func entity(in source: String, at start: String.Index) -> (String, Strin
         cursor = source.index(after: cursor)
         guard cursor < source.endIndex else { return nil }
         let hexadecimal = source[cursor] == "x" || source[cursor] == "X"
-        if hexadecimal {
-            cursor = source.index(after: cursor)
-        }
+        if hexadecimal { cursor = source.index(after: cursor) }
         let digitsStart = cursor
         var digits = 0
-        while cursor < source.endIndex, digits < 8 {
+        while cursor < source.endIndex, digits < MarkdownScanLimit.maximumNumericCharacterReferenceDigits {
             let character = source[cursor]
             let isDigit = hexadecimal ? character.isHexDigit : character.isNumber
             if !isDigit { break }
@@ -445,17 +413,17 @@ private func entity(in source: String, at start: String.Index) -> (String, Strin
         let text = source[digitsStart..<cursor]
         guard let value = Int(text, radix: hexadecimal ? 16 : 10) else { return nil }
         let next = source.index(after: cursor)
-        if value == 0 || !(0...0x10FFFF).contains(value) || (0xD800...0xDFFF).contains(value) {
+        let outOfRange = !(0...UnicodeScalarBound.maximum).contains(value)
+        let surrogate = (UnicodeScalarBound.surrogateStart...UnicodeScalarBound.surrogateEnd).contains(value)
+        if value == 0 || outOfRange || surrogate {
             return ("\u{FFFD}", next)
         }
-        guard let scalar = Unicode.Scalar(value) else {
-            return ("\u{FFFD}", next)
-        }
+        guard let scalar = Unicode.Scalar(value) else { return ("\u{FFFD}", next) }
         return (String(scalar), next)
     }
     let nameStart = cursor
     var length = 0
-    while cursor < source.endIndex, length < 32 {
+    while cursor < source.endIndex, length < MarkdownScanLimit.maximumCharacterReferenceNameLength {
         let character = source[cursor]
         if !(character.isLetter || character.isNumber) { break }
         length += 1
@@ -481,10 +449,12 @@ func urlScheme(_ destination: String) -> String? {
 }
 
 func containsControlCharacter(_ string: String) -> Bool {
-    string.unicodeScalars.contains { $0.value < 32 || $0.value == 127 }
+    string.unicodeScalars.contains { $0.value < UInt32(ASCIIByte.space) || $0.value == UInt32(ASCIIByte.delete) }
 }
 
 func isASCIILetter(_ character: Character) -> Bool {
     guard let value = character.asciiValue else { return false }
-    return (value >= 65 && value <= 90) || (value >= 97 && value <= 122)
+    let isUppercase = value >= ASCIIByte.uppercaseA && value <= ASCIIByte.uppercaseZ
+    let isLowercase = value >= ASCIIByte.lowercaseA && value <= ASCIIByte.lowercaseZ
+    return isUppercase || isLowercase
 }

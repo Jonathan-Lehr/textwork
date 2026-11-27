@@ -155,6 +155,117 @@ final class HighlighterTests: XCTestCase {
         XCTAssertEqual(content(folded, role: .link), ["Foo   Bar", "/url", "foo bar"])
     }
 
+    func testReferenceDefinitionParserReadsLabelDestinationAndTitle() throws {
+        func parse(_ source: String) -> ReferenceDefinitionParse? {
+            let bytes = Array(source.utf8)
+            let lines = DocumentBuffer.lines(in: bytes)
+            return ReferenceDefinitionParser.parseLine(bytes: bytes, line: lines[0])
+        }
+        func slice(_ source: String, _ range: Range<Int>) -> String {
+            String(decoding: Array(source.utf8)[range], as: UTF8.self)
+        }
+        func html(_ source: String) -> ParsedReferenceDefinition? {
+            parseReferenceDefinition(source)
+        }
+
+        let angle = "[example]: <https://example.com>"
+        let parsedAngle = try XCTUnwrap(parse(angle))
+        XCTAssertEqual(parsedAngle.normalizedLabel, "example")
+        XCTAssertEqual(slice(angle, parsedAngle.destination), "https://example.com")
+        XCTAssertNotNil(parsedAngle.destinationOpening)
+        XCTAssertNil(parsedAngle.title)
+        XCTAssertEqual(html(angle)?.destination, "https://example.com")
+
+        let empty = "[example]: <>"
+        let parsedEmpty = try XCTUnwrap(parse(empty))
+        XCTAssertTrue(parsedEmpty.destination.isEmpty)
+        XCTAssertNotNil(parsedEmpty.destinationOpening)
+        XCTAssertNotNil(parsedEmpty.destinationClosing)
+        XCTAssertEqual(html(empty)?.destination, "")
+
+        let parentheses = "[example]: http://example.com/a(b)"
+        let parsedParentheses = try XCTUnwrap(parse(parentheses))
+        XCTAssertEqual(slice(parentheses, parsedParentheses.destination), "http://example.com/a(b)")
+        XCTAssertEqual(html(parentheses)?.destination, "http://example.com/a(b)")
+
+        let doubleQuoted = "[example]: /url \"title\""
+        let parsedDouble = try XCTUnwrap(parse(doubleQuoted))
+        XCTAssertEqual(parsedDouble.title.map { slice(doubleQuoted, $0) }, "title")
+        XCTAssertEqual(html(doubleQuoted)?.title, "title")
+
+        let singleQuoted = "[example]: /url 'title'"
+        let parsedSingle = try XCTUnwrap(parse(singleQuoted))
+        XCTAssertEqual(parsedSingle.title.map { slice(singleQuoted, $0) }, "title")
+        XCTAssertEqual(html(singleQuoted)?.title, "title")
+
+        let escaped = "[example]: /url \"a\\\"b\""
+        let parsedEscaped = try XCTUnwrap(parse(escaped))
+        XCTAssertEqual(parsedEscaped.title.map { slice(escaped, $0) }, "a\\\"b")
+        XCTAssertEqual(html(escaped)?.title, "a\"b")
+
+        let tabbed = "[example]:\t/url\t\"Title\""
+        let parsedTabbed = try XCTUnwrap(parse(tabbed))
+        XCTAssertEqual(slice(tabbed, parsedTabbed.destination), "/url")
+        XCTAssertEqual(parsedTabbed.title.map { slice(tabbed, $0) }, "Title")
+        XCTAssertEqual(html(tabbed)?.title, "Title")
+
+        let spaced = "[example]:  /url  \"Title\""
+        XCTAssertEqual(parse(spaced)?.title.map { slice(spaced, $0) }, "Title")
+        XCTAssertEqual(html(spaced)?.title, "Title")
+
+        let quotedInsideDestination = "[example]: /url\"title\""
+        let parsedQuotedDestination = try XCTUnwrap(parse(quotedInsideDestination))
+        XCTAssertEqual(slice(quotedInsideDestination, parsedQuotedDestination.destination), "/url\"title\"")
+        XCTAssertNil(parsedQuotedDestination.title)
+        XCTAssertEqual(html(quotedInsideDestination)?.destination, "/url\"title\"")
+        XCTAssertNil(html(quotedInsideDestination)?.title)
+        XCTAssertNil(parse("[example]: </url>\"title\""))
+        XCTAssertNil(html("[example]: </url>\"title\""))
+        let spacedAfterAngle = "[example]: </url> \"title\""
+        XCTAssertEqual(parse(spacedAfterAngle)?.title.map { slice(spacedAfterAngle, $0) }, "title")
+        XCTAssertEqual(html(spacedAfterAngle)?.title, "title")
+        XCTAssertNil(parse("[example] https://example.com"))
+        XCTAssertNil(html("[example] https://example.com"))
+
+        let trailingBackslash = "[example]: /url\\"
+        let parsedBackslash = try XCTUnwrap(parse(trailingBackslash))
+        XCTAssertEqual(slice(trailingBackslash, parsedBackslash.destination), "/url\\")
+        XCTAssertNil(html(trailingBackslash))
+
+        let control = "[example]: /url\u{01}"
+        XCTAssertNil(parse(control))
+        XCTAssertEqual(html(control)?.destination, "/url\u{01}")
+
+        let exact = "[" + String(repeating: "a", count: MarkdownScanLimit.maximumReferenceLabelLength) + "]: /url"
+        XCTAssertNotNil(parse(exact))
+        XCTAssertNotNil(html(exact))
+        let tooLong = "[" + String(repeating: "a", count: MarkdownScanLimit.maximumReferenceLabelLength + 1) + "]: /url"
+        XCTAssertNil(parse(tooLong))
+        XCTAssertNil(html(tooLong))
+        let accents = "[" + String(repeating: "é", count: 500) + "]: /url"
+        XCTAssertGreaterThan(Array(String(repeating: "é", count: 500).utf8).count, MarkdownScanLimit.maximumReferenceLabelLength)
+        XCTAssertNotNil(parse(accents))
+        XCTAssertNotNil(html(accents))
+
+        XCTAssertNotNil(parse("   [example]: /url"))
+        XCTAssertNotNil(html("   [example]: /url"))
+        XCTAssertNil(parse("    [example]: /url"))
+        XCTAssertNil(html("    [example]: /url"))
+        XCTAssertNil(parse("\t[example]: /url"))
+        XCTAssertNil(html("\t[example]: /url"))
+    }
+
+    func testTruncatedFourByteLeadCountsAsOneUTF16Unit() {
+        let truncated: [UInt8] = [0xF0, 0x9F]
+        let width = DocumentBuffer.scalarWidth(truncated, 0)
+        XCTAssertEqual(width.0, truncated.count)
+        XCTAssertEqual(width.1, 1)
+        let complete: [UInt8] = [0xF0, 0x9F, 0x98, 0x80]
+        let completeWidth = DocumentBuffer.scalarWidth(complete, 0)
+        XCTAssertEqual(completeWidth.0, 4)
+        XCTAssertEqual(completeWidth.1, 2)
+    }
+
     func testInlineHTMLAndHTMLBlocks() {
         let inline = "Use <em>word</em> and <!-- note --> here."
         XCTAssertEqual(content(inline, role: .html), ["em", "em", " note "])

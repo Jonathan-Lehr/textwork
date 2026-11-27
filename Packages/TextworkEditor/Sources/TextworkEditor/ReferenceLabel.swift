@@ -6,9 +6,7 @@ func normalizeReferenceLabel(_ label: String) -> String {
     var hasContent = false
     for character in label {
         if isReferenceLabelWhitespace(character) {
-            if hasContent {
-                pendingSpace = true
-            }
+            if hasContent { pendingSpace = true }
             continue
         }
         if pendingSpace {

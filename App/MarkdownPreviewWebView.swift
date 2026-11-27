@@ -58,12 +58,12 @@ private struct MarkdownPreviewRepresentable: UIViewRepresentable {
 final class MarkdownPreviewCoordinator: NSObject, WKNavigationDelegate {
     let handler = PreviewResourceHandler()
     private let renderer = MarkdownHTMLRenderer(imageAddressing: .preview)
-    private var didLoad = false
-    private var shellReady = false
+    private var hasRequestedPreviewDocument = false
+    private var previewPageDidFinishLoading = false
     private var loadedBody: String?
     private var pendingBody: String?
     private var loadedDirectory: String?
-    private var generation = 0
+    private var latestBodyUpdateSequence = 0
 
     func makeWebView() -> WKWebView {
         let configuration = WKWebViewConfiguration()
@@ -101,9 +101,9 @@ final class MarkdownPreviewCoordinator: NSObject, WKNavigationDelegate {
     func update(bodyHTML: String, resourceDirectory: URL?, webView: WKWebView) {
         handler.setResourceDirectory(resourceDirectory)
         let directoryKey = resourceDirectory?.standardizedFileURL.path
-        if !didLoad || directoryKey != loadedDirectory {
+        if !hasRequestedPreviewDocument || directoryKey != loadedDirectory {
             loadedDirectory = directoryKey
-            didLoad = true
+            hasRequestedPreviewDocument = true
             load(bodyHTML, in: webView)
             return
         }
@@ -113,7 +113,7 @@ final class MarkdownPreviewCoordinator: NSObject, WKNavigationDelegate {
     }
 
     private func load(_ bodyHTML: String, in webView: WKWebView) {
-        shellReady = false
+        previewPageDidFinishLoading = false
         pendingBody = bodyHTML
         loadedBody = bodyHTML
         handler.setDocumentHTML(renderer.document(wrapping: bodyHTML, title: "Preview"))
@@ -121,12 +121,12 @@ final class MarkdownPreviewCoordinator: NSObject, WKNavigationDelegate {
     }
 
     private func applyIfReady(in webView: WKWebView) {
-        guard shellReady, let body = pendingBody, body != loadedBody else { return }
-        generation += 1
-        let token = generation
+        guard previewPageDidFinishLoading, let body = pendingBody, body != loadedBody else { return }
+        latestBodyUpdateSequence += 1
+        let bodyUpdateSequence = latestBodyUpdateSequence
         let script = """
-        if (window.textworkPreviewGeneration > generation) { return false; }
-        window.textworkPreviewGeneration = generation;
+        if (window.textworkPreviewBodyUpdateSequence > bodyUpdateSequence) { return false; }
+        window.textworkPreviewBodyUpdateSequence = bodyUpdateSequence;
         const content = document.getElementById('content');
         if (!content) { return false; }
         const scrolling = document.scrollingElement || document.documentElement;
@@ -139,21 +139,21 @@ final class MarkdownPreviewCoordinator: NSObject, WKNavigationDelegate {
             do {
                 let result = try await webView.callAsyncJavaScript(
                     script,
-                    arguments: ["body": body, "generation": token],
+                    arguments: ["body": body, "bodyUpdateSequence": bodyUpdateSequence],
                     in: nil,
                     contentWorld: .page
                 )
-                guard token == self.generation, (result as? Bool) != false else { return }
+                guard bodyUpdateSequence == self.latestBodyUpdateSequence, (result as? Bool) != false else { return }
                 self.loadedBody = body
             } catch {
-                guard token == self.generation else { return }
+                guard bodyUpdateSequence == self.latestBodyUpdateSequence else { return }
                 self.load(body, in: webView)
             }
         }
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        shellReady = true
+        previewPageDidFinishLoading = true
         applyIfReady(in: webView)
     }
 
@@ -163,14 +163,10 @@ final class MarkdownPreviewCoordinator: NSObject, WKNavigationDelegate {
     ) async -> WKNavigationActionPolicy {
         guard let url = navigationAction.request.url else { return .cancel }
         if navigationAction.navigationType == .linkActivated {
-            if let external = externalURL(for: url) {
-                openExternally(external)
-            }
+            if let external = externalURL(for: url) { openExternally(external) }
             return .cancel
         }
-        if url.scheme?.lowercased() == MarkdownHTMLRenderer.previewScheme {
-            return .allow
-        }
+        if url.scheme?.lowercased() == MarkdownHTMLRenderer.previewScheme { return .allow }
         return .cancel
     }
 
@@ -188,9 +184,7 @@ final class MarkdownPreviewCoordinator: NSObject, WKNavigationDelegate {
 
     private func externalURL(for url: URL) -> URL? {
         guard let scheme = url.scheme?.lowercased() else { return nil }
-        if scheme == "http" || scheme == "https" || scheme == "mailto" {
-            return url
-        }
+        if scheme == "http" || scheme == "https" || scheme == "mailto" { return url }
         guard scheme == MarkdownHTMLRenderer.previewScheme else { return nil }
         if url.path == "/preview.html" || url.path.isEmpty { return nil }
         guard let directory = handler.resourceDirectory else { return nil }
@@ -209,9 +203,7 @@ final class MarkdownPreviewCoordinator: NSObject, WKNavigationDelegate {
 final class PreviewResourceHandler: NSObject, WKURLSchemeHandler, @unchecked Sendable {
     static let pageURL: URL = {
         let string = "\(MarkdownHTMLRenderer.previewScheme)://\(MarkdownHTMLRenderer.previewHost)/preview.html"
-        guard let url = URL(string: string) else {
-            preconditionFailure("The preview page URL is valid.")
-        }
+        guard let url = URL(string: string) else { preconditionFailure("The preview page URL is valid.") }
         return url
     }()
 
@@ -239,9 +231,7 @@ final class PreviewResourceHandler: NSObject, WKURLSchemeHandler, @unchecked Sen
         directory = url
         accessingSecurityScope = started
         lock.unlock()
-        if wasAccessing {
-            previous?.stopAccessingSecurityScopedResource()
-        }
+        if wasAccessing { previous?.stopAccessingSecurityScopedResource() }
     }
 
     var resourceDirectory: URL? {
@@ -301,9 +291,7 @@ final class PreviewResourceHandler: NSObject, WKURLSchemeHandler, @unchecked Sen
         let identifier = ObjectIdentifier(task)
         lock.lock()
         let stopped = stoppedIdentifiers.contains(identifier)
-        if stopped {
-            stoppedIdentifiers.remove(identifier)
-        }
+        if stopped { stoppedIdentifiers.remove(identifier) }
         lock.unlock()
         return stopped
     }
@@ -320,9 +308,7 @@ final class PreviewResourceHandler: NSObject, WKURLSchemeHandler, @unchecked Sen
             "Content-Type": mimeType == "text/html" ? "text/html; charset=utf-8" : mimeType,
             "Cache-Control": "no-store",
         ]
-        if let contentSecurityPolicy {
-            headers["Content-Security-Policy"] = contentSecurityPolicy
-        }
+        if let contentSecurityPolicy { headers["Content-Security-Policy"] = contentSecurityPolicy }
         guard let response = HTTPURLResponse(
             url: url,
             statusCode: 200,
@@ -345,24 +331,15 @@ final class PreviewResourceHandler: NSObject, WKURLSchemeHandler, @unchecked Sen
 
     private func mimeType(for fileURL: URL) -> String {
         switch fileURL.pathExtension.lowercased() {
-        case "png":
-            return "image/png"
-        case "jpg", "jpeg":
-            return "image/jpeg"
-        case "gif":
-            return "image/gif"
-        case "webp":
-            return "image/webp"
-        case "svg":
-            return "image/svg+xml"
-        case "bmp":
-            return "image/bmp"
-        case "heic":
-            return "image/heic"
-        case "tif", "tiff":
-            return "image/tiff"
-        default:
-            return "application/octet-stream"
+        case "png": return "image/png"
+        case "jpg", "jpeg": return "image/jpeg"
+        case "gif": return "image/gif"
+        case "webp": return "image/webp"
+        case "svg": return "image/svg+xml"
+        case "bmp": return "image/bmp"
+        case "heic": return "image/heic"
+        case "tif", "tiff": return "image/tiff"
+        default: return "application/octet-stream"
         }
     }
 }

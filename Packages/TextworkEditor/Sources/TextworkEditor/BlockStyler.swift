@@ -34,8 +34,8 @@ enum BlockStyler {
                 candidateLabels: &candidateLabels,
                 into: &spans
             )
-        case .fence:
-            styleFence(bytes: bytes, lines: lines, startLine: startLine, endLine: endLine, into: &spans)
+        case .fence: styleFence(bytes: bytes, lines: lines, startLine: startLine, endLine: endLine, into:
+            &spans)
         case .thematic:
             let line = lines[startLine]
             append(line.byteStart..<line.contentByteEnd, role: .thematicBreak, isSyntax: true, bytes: bytes, lines: lines, into: &spans)
@@ -78,8 +78,8 @@ enum BlockStyler {
                 candidateLabels: &candidateLabels,
                 into: &spans
             )
-        case .referenceDefinition:
-            styleReferenceDefinition(bytes: bytes, line: lines[startLine], into: &spans)
+        case .referenceDefinition: styleReferenceDefinition(bytes: bytes, line: lines[startLine], into:
+            &spans)
         case .htmlBlock:
             let range = contentByteRange(lines: lines, startLine: startLine, endLine: endLine)
             spans.append(contentsOf: InlineStyler.htmlSpans(bytes: bytes, range: range, lines: lines, allowMultilineMarkup: true))
@@ -190,27 +190,27 @@ private func styleHashHeading(
     let role = HighlightRole.heading(level: level)
     let sliceStart = line.byteStart
     let sliceEnd = line.contentByteEnd
-    let lead = leadingByteCount(bytes, from: sliceStart, to: sliceEnd, columnLimit: 3)
+    let lead = leadingByteCount(bytes, from: sliceStart, to: sliceEnd, columnLimit: MarkdownScanLimit.maximumOpeningIndent)
     var index = sliceStart + lead
     let hashStart = index
-    while index < sliceEnd && bytes[index] == 0x23 {
+    while index < sliceEnd && bytes[index] == ASCIIByte.hash {
         index += 1
     }
     append(hashStart..<index, role: role, isSyntax: true, bytes: bytes, lines: [], lineHint: line, into: &spans)
-    if index < sliceEnd && (bytes[index] == 0x20 || bytes[index] == 0x09) {
+    if index < sliceEnd && (bytes[index].isHorizontalSpace) {
         append(index..<(index + 1), role: role, isSyntax: true, bytes: bytes, lines: [], lineHint: line, into: &spans)
         index += 1
     }
     var contentEnd = sliceEnd
     var trim = sliceEnd
-    while trim > index && (bytes[trim - 1] == 0x20 || bytes[trim - 1] == 0x09) {
+    while trim > index && (bytes[trim - 1].isHorizontalSpace) {
         trim -= 1
     }
     var hashEnd = trim
-    while hashEnd > index && bytes[hashEnd - 1] == 0x23 {
+    while hashEnd > index && bytes[hashEnd - 1] == ASCIIByte.hash {
         hashEnd -= 1
     }
-    if hashEnd < trim, hashEnd > index, bytes[hashEnd - 1] == 0x20 || bytes[hashEnd - 1] == 0x09 {
+    if hashEnd < trim, hashEnd > index, bytes[hashEnd - 1].isHorizontalSpace {
         contentEnd = hashEnd - 1
         append(contentEnd..<sliceEnd, role: role, isSyntax: true, bytes: bytes, lines: [], lineHint: line, into: &spans)
     }
@@ -302,12 +302,12 @@ private func styleIndentedCode(
         let line = lines[lineIndex]
         var index = line.byteStart
         var columns = 0
-        while index < line.contentByteEnd && columns < 4 {
-            if bytes[index] == 0x20 {
+        while index < line.contentByteEnd && columns < MarkdownScanLimit.codeBlockIndent {
+            if bytes[index] == ASCIIByte.space {
                 columns += 1
                 index += 1
-            } else if bytes[index] == 0x09 {
-                columns += 4 - (columns % 4)
+            } else if bytes[index] == ASCIIByte.tab {
+                columns += MarkdownScanLimit.tabColumnWidth - (columns % MarkdownScanLimit.tabColumnWidth)
                 index += 1
             } else {
                 break
@@ -330,14 +330,12 @@ private func styleQuote(
         let line = lines[lineIndex]
         var index = line.byteStart
         let limit = line.contentByteEnd
-        let lead = leadingByteCount(bytes, from: index, to: limit, columnLimit: 3)
+        let lead = leadingByteCount(bytes, from: index, to: limit, columnLimit: MarkdownScanLimit.maximumOpeningIndent)
         index += lead
-        while index < limit && bytes[index] == 0x3E {
+        while index < limit && bytes[index] == ASCIIByte.greaterThan {
             let markerStart = index
             index += 1
-            if index < limit && bytes[index] == 0x20 {
-                index += 1
-            }
+            if index < limit && bytes[index] == ASCIIByte.space { index += 1 }
             append(markerStart..<index, role: .blockQuote, isSyntax: true, bytes: bytes, lines: lines, into: &spans)
         }
         if index < limit {
@@ -376,29 +374,27 @@ private func styleList(
 ) {
     let limit = line.contentByteEnd
     var index = line.byteStart
-    index += leadingByteCount(bytes, from: index, to: limit, columnLimit: 3)
+    index += leadingByteCount(bytes, from: index, to: limit, columnLimit: MarkdownScanLimit.maximumOpeningIndent)
     let markerStart = index
-    if index < limit && (bytes[index] == 0x2D || bytes[index] == 0x2B || bytes[index] == 0x2A) {
+    if index < limit && (bytes[index] == ASCIIByte.hyphen || bytes[index] == ASCIIByte.plus || bytes[index] == ASCIIByte.asterisk) {
         index += 1
     } else {
         while index < limit && bytes[index].isASCIIDigit {
             index += 1
         }
-        if index < limit && (bytes[index] == 0x2E || bytes[index] == 0x29) {
+        if index < limit && (bytes[index] == ASCIIByte.period || bytes[index] == ASCIIByte.rightParenthesis) {
             index += 1
         }
     }
-    while index < limit && (bytes[index] == 0x20 || bytes[index] == 0x09) {
+    while index < limit && (bytes[index].isHorizontalSpace) {
         index += 1
         break
     }
-    if index + 2 < limit, bytes[index] == 0x5B, bytes[index + 2] == 0x5D {
+    if index + 2 < limit, bytes[index] == ASCIIByte.leftBracket, bytes[index + 2] == ASCIIByte.rightBracket {
         let checkbox = bytes[index + 1]
-        if checkbox == 0x20 || checkbox == 0x78 || checkbox == 0x58 {
+        if checkbox == ASCIIByte.space || checkbox == ASCIIByte.lowercaseX || checkbox == ASCIIByte.uppercaseX {
             index += 3
-            if index < limit && (bytes[index] == 0x20 || bytes[index] == 0x09) {
-                index += 1
-            }
+            if index < limit && (bytes[index].isHorizontalSpace) { index += 1 }
         }
     }
     append(markerStart..<index, role: .listMarker, isSyntax: true, bytes: bytes, lines: [], lineHint: line, into: &spans)
@@ -424,15 +420,15 @@ private func styleTable(
 ) {
     for lineIndex in startLine..<endLine {
         let line = lines[lineIndex]
-            if line.kind == .tableDelimiter {
+        if line.kind == .tableDelimiter {
             append(line.byteStart..<line.contentByteEnd, role: .table, isSyntax: true, bytes: bytes, lines: lines, into: &spans)
             continue
         }
         let cells = tableCells(bytes: bytes, line: line)
         for cell in cells {
             switch cell {
-            case .pipe(let range):
-                append(range, role: .table, isSyntax: true, bytes: bytes, lines: lines, into: &spans)
+            case .pipe(let range): append(range, role: .table, isSyntax: true, bytes: bytes, lines: lines, into:
+                &spans)
             case .text(let range):
                 append(range, role: .table, isSyntax: false, bytes: bytes, lines: lines, into: &spans)
                 spans.append(contentsOf: InlineStyler.spans(
@@ -458,15 +454,13 @@ private func tableCells(bytes: [UInt8], line: TextLine) -> [TableCell] {
     let limit = line.contentByteEnd
     var textStart = index
     while index < limit {
-        if bytes[index] == 0x5C, index + 1 < limit {
+        if bytes[index] == ASCIIByte.backslash, index + 1 < limit {
             index += 2
             continue
         }
-        if bytes[index] == 0x7C {
+        if bytes[index] == ASCIIByte.verticalBar {
             let trimmed = trimSpaces(bytes, textStart..<index)
-            if !trimmed.isEmpty {
-                cells.append(.text(trimmed))
-            }
+            if !trimmed.isEmpty { cells.append(.text(trimmed)) }
             cells.append(.pipe(index..<(index + 1)))
             index += 1
             textStart = index
@@ -475,25 +469,23 @@ private func tableCells(bytes: [UInt8], line: TextLine) -> [TableCell] {
         index += DocumentBuffer.scalarWidth(bytes, index).0
     }
     let trimmed = trimSpaces(bytes, textStart..<limit)
-    if !trimmed.isEmpty {
-        cells.append(.text(trimmed))
-    }
+    if !trimmed.isEmpty { cells.append(.text(trimmed)) }
     return cells
 }
 
 private func scanCodeSpans(bytes: [UInt8], range: Range<Int>, mask: inout ByteMask, into raw: inout [RawSpan]) {
     var index = range.lowerBound
     while index < range.upperBound {
-        if bytes[index] != 0x60 || isEscaped(bytes, index) {
+        if bytes[index] != ASCIIByte.backtick || isEscaped(bytes, index) {
             index += DocumentBuffer.scalarWidth(bytes, index).0
             continue
         }
-        let openerLength = runLength(bytes, index, marker: 0x60, limit: range.upperBound)
+        let openerLength = runLength(bytes, index, marker: ASCIIByte.backtick, limit: range.upperBound)
         var cursor = index + openerLength
         var closer: Int?
         while cursor < range.upperBound {
-            if bytes[cursor] == 0x60 && !isEscaped(bytes, cursor) {
-                let length = runLength(bytes, cursor, marker: 0x60, limit: range.upperBound)
+            if bytes[cursor] == ASCIIByte.backtick && !isEscaped(bytes, cursor) {
+                let length = runLength(bytes, cursor, marker: ASCIIByte.backtick, limit: range.upperBound)
                 if length == openerLength {
                     closer = cursor
                     break
@@ -509,9 +501,7 @@ private func scanCodeSpans(bytes: [UInt8], range: Range<Int>, mask: inout ByteMa
         }
         raw.append(RawSpan(byteRange: index..<(index + openerLength), role: .codeSpan, isSyntax: true))
         let content = (index + openerLength)..<closer
-        if !content.isEmpty {
-            raw.append(RawSpan(byteRange: content, role: .codeSpan, isSyntax: false))
-        }
+        if !content.isEmpty { raw.append(RawSpan(byteRange: content, role: .codeSpan, isSyntax: false)) }
         raw.append(RawSpan(byteRange: closer..<(closer + openerLength), role: .codeSpan, isSyntax: true))
         mask.cover(index..<(closer + openerLength))
         index = closer + openerLength
@@ -532,8 +522,8 @@ private func scanLinksAndImages(
             index = end
             continue
         }
-        let isImage = bytes[index] == 0x21 && index + 1 < range.upperBound && bytes[index + 1] == 0x5B && !isEscaped(bytes, index)
-        let isLink = bytes[index] == 0x5B && !isEscaped(bytes, index)
+        let isImage = bytes[index] == ASCIIByte.exclamationMark && index + 1 < range.upperBound && bytes[index + 1] == ASCIIByte.leftBracket && !isEscaped(bytes, index)
+        let isLink = bytes[index] == ASCIIByte.leftBracket && !isEscaped(bytes, index)
         guard isImage || isLink else {
             index += DocumentBuffer.scalarWidth(bytes, index).0
             continue
@@ -545,7 +535,7 @@ private func scanLinksAndImages(
             continue
         }
         let afterLabel = labelEnd + 1
-        if afterLabel < range.upperBound, bytes[afterLabel] == 0x28 {
+        if afterLabel < range.upperBound, bytes[afterLabel] == ASCIIByte.leftParenthesis {
             guard let destinationEnd = closingParenthesis(bytes: bytes, from: afterLabel + 1, limit: range.upperBound) else {
                 index += 1
                 continue
@@ -605,9 +595,9 @@ private func referenceLinkEnd(
 ) -> Int? {
     let linkText = normalizedLabel(bytes: bytes, range: (bracket + 1)..<labelEnd)
     let afterLabel = labelEnd + 1
-    if afterLabel < range.upperBound, bytes[afterLabel] == 0x5B {
+    if afterLabel < range.upperBound, bytes[afterLabel] == ASCIIByte.leftBracket {
         let secondStart = afterLabel + 1
-        if secondStart < range.upperBound, bytes[secondStart] == 0x5D {
+        if secondStart < range.upperBound, bytes[secondStart] == ASCIIByte.rightBracket {
             guard !linkText.isEmpty else { return nil }
             candidateLabels.append(linkText)
             return definedLabels.contains(linkText) ? secondStart + 1 : nil
@@ -618,18 +608,10 @@ private func referenceLinkEnd(
             return definedLabels.contains(linkText) ? labelEnd + 1 : nil
         }
         let reference = normalizedLabel(bytes: bytes, range: secondStart..<secondEnd)
-        if !reference.isEmpty {
-            candidateLabels.append(reference)
-        }
-        if !linkText.isEmpty {
-            candidateLabels.append(linkText)
-        }
-        if !reference.isEmpty, definedLabels.contains(reference) {
-            return secondEnd + 1
-        }
-        if !linkText.isEmpty, definedLabels.contains(linkText) {
-            return labelEnd + 1
-        }
+        if !reference.isEmpty { candidateLabels.append(reference) }
+        if !linkText.isEmpty { candidateLabels.append(linkText) }
+        if !reference.isEmpty, definedLabels.contains(reference) { return secondEnd + 1 }
+        if !linkText.isEmpty, definedLabels.contains(linkText) { return labelEnd + 1 }
         return nil
     }
     guard !linkText.isEmpty else { return nil }
@@ -648,9 +630,7 @@ private func appendLinkLabel(
     mask: ByteMask,
     into raw: inout [RawSpan]
 ) {
-    if isImage {
-        raw.append(RawSpan(byteRange: markerStart..<(markerStart + 1), role: role, isSyntax: true))
-    }
+    if isImage { raw.append(RawSpan(byteRange: markerStart..<(markerStart + 1), role: role, isSyntax: true)) }
     raw.append(RawSpan(byteRange: bracket..<(bracket + 1), role: role, isSyntax: true))
     let label = (bracket + 1)..<labelEnd
     if !label.isEmpty {
@@ -674,7 +654,7 @@ private func scanAutolinks(bytes: [UInt8], range: Range<Int>, mask: inout ByteMa
             index = end
             continue
         }
-        if bytes[index] == 0x3C && !isEscaped(bytes, index) {
+        if bytes[index] == ASCIIByte.lessThan && !isEscaped(bytes, index) {
             if let end = autolinkEnd(bytes: bytes, open: index, limit: range.upperBound) {
                 raw.append(RawSpan(byteRange: index..<(index + 1), role: .link, isSyntax: true))
                 raw.append(RawSpan(byteRange: (index + 1)..<end, role: .link, isSyntax: false))
@@ -710,7 +690,7 @@ private func scanInlineHTML(
             index = end
             continue
         }
-        if bytes[index] == 0x3C, !isEscaped(bytes, index),
+        if bytes[index] == ASCIIByte.lessThan, !isEscaped(bytes, index),
            let markup = htmlMarkup(bytes: bytes, open: index, limit: range.upperBound, allowMultilineMarkup: allowMultilineMarkup) {
             raw.append(contentsOf: markup.spans)
             mask.cover(index..<markup.end)
@@ -740,16 +720,16 @@ private func htmlMarkup(bytes: [UInt8], open: Int, limit: Int, allowMultilineMar
         }
         return markup(open: open, delimiter: 9, body: (open + 9)..<end, closer: 3)
     }
-    if bytes[open + 1] == 0x3F {
+    if bytes[open + 1] == ASCIIByte.questionMark {
         guard let end = seek(bytes, from: open + 2, limit: limit, ascii: "?>", allowNewline: allowMultilineMarkup) else {
             return nil
         }
         return markup(open: open, delimiter: 2, body: (open + 2)..<end, closer: 2)
     }
-    if bytes[open + 1] == 0x21 {
+    if bytes[open + 1] == ASCIIByte.exclamationMark {
         let letter = open + 2
         guard letter < limit, bytes[letter].isASCIILetter else { return nil }
-        guard let end = seekByte(bytes, from: letter, limit: limit, byte: 0x3E, allowNewline: allowMultilineMarkup) else {
+        guard let end = seekByte(bytes, from: letter, limit: limit, byte: ASCIIByte.greaterThan, allowNewline: allowMultilineMarkup) else {
             return nil
         }
         return markup(open: open, delimiter: 2, body: (open + 2)..<end, closer: 1)
@@ -759,15 +739,15 @@ private func htmlMarkup(bytes: [UInt8], open: Int, limit: Int, allowMultilineMar
 
 private func htmlTag(bytes: [UInt8], open: Int, limit: Int) -> HTMLMarkup? {
     var index = open + 1
-    let closingTag = index < limit && bytes[index] == 0x2F
+    let closingTag = index < limit && bytes[index] == ASCIIByte.slash
     if closingTag { index += 1 }
     let nameStart = index
     guard index < limit, bytes[index].isASCIILetter else { return nil }
     index += 1
     while index < limit {
         let byte = bytes[index]
-        if byte == 0x0A || byte == 0x0D { return nil }
-        if byte.isASCIILetter || byte.isASCIIDigit || byte == 0x2D {
+        if byte == ASCIIByte.lineFeed || byte == ASCIIByte.carriageReturn { return nil }
+        if byte.isASCIILetter || byte.isASCIIDigit || byte == ASCIIByte.hyphen {
             index += 1
             continue
         }
@@ -778,9 +758,9 @@ private func htmlTag(bytes: [UInt8], open: Int, limit: Int) -> HTMLMarkup? {
     var quote: UInt8?
     while index < limit {
         let byte = bytes[index]
-        if byte == 0x0A || byte == 0x0D { return nil }
+        if byte == ASCIIByte.lineFeed || byte == ASCIIByte.carriageReturn { return nil }
         if let openQuote = quote {
-            if byte == 0x5C, index + 1 < limit, bytes[index + 1] != 0x0A, bytes[index + 1] != 0x0D {
+            if byte == ASCIIByte.backslash, index + 1 < limit, bytes[index + 1] != ASCIIByte.lineFeed, bytes[index + 1] != ASCIIByte.carriageReturn {
                 index += 2
                 continue
             }
@@ -788,23 +768,19 @@ private func htmlTag(bytes: [UInt8], open: Int, limit: Int) -> HTMLMarkup? {
             index += 1
             continue
         }
-        if byte == 0x22 || byte == 0x27 {
+        if byte == ASCIIByte.quotationMark || byte == ASCIIByte.apostrophe {
             quote = byte
             index += 1
             continue
         }
-        if byte == 0x3E {
+        if byte == ASCIIByte.greaterThan {
             let name = nameStart..<nameEnd
             var spans: [RawSpan] = []
             let openerEnd = closingTag ? open + 2 : open + 1
             spans.append(RawSpan(byteRange: open..<openerEnd, role: .html, isSyntax: true))
-            if !name.isEmpty {
-                spans.append(RawSpan(byteRange: name, role: .html, isSyntax: false))
-            }
+            if !name.isEmpty { spans.append(RawSpan(byteRange: name, role: .html, isSyntax: false)) }
             var closerStart = index
-            if closerStart > nameEnd, bytes[closerStart - 1] == 0x2F {
-                closerStart -= 1
-            }
+            if closerStart > nameEnd, bytes[closerStart - 1] == ASCIIByte.slash { closerStart -= 1 }
             if nameEnd < closerStart {
                 spans.append(RawSpan(byteRange: nameEnd..<closerStart, role: .html, isSyntax: false))
             }
@@ -818,9 +794,7 @@ private func htmlTag(bytes: [UInt8], open: Int, limit: Int) -> HTMLMarkup? {
 
 private func markup(open: Int, delimiter: Int, body: Range<Int>, closer: Int) -> HTMLMarkup {
     var spans = [RawSpan(byteRange: open..<(open + delimiter), role: .html, isSyntax: true)]
-    if !body.isEmpty {
-        spans.append(RawSpan(byteRange: body, role: .html, isSyntax: false))
-    }
+    if !body.isEmpty { spans.append(RawSpan(byteRange: body, role: .html, isSyntax: false)) }
     let closerStart = body.upperBound
     spans.append(RawSpan(byteRange: closerStart..<(closerStart + closer), role: .html, isSyntax: true))
     return HTMLMarkup(spans: spans, end: closerStart + closer)
@@ -831,10 +805,10 @@ private func seek(_ bytes: [UInt8], from start: Int, limit: Int, ascii: String, 
     guard !needle.isEmpty else { return nil }
     var index = start
     while index + needle.count <= limit {
-        if !allowNewline, bytes[index] == 0x0A || bytes[index] == 0x0D { return nil }
-        if Array(bytes[index..<(index + needle.count)]) == needle {
-            return index
+        if !allowNewline, bytes[index] == ASCIIByte.lineFeed || bytes[index] == ASCIIByte.carriageReturn {
+            return nil
         }
+        if Array(bytes[index..<(index + needle.count)]) == needle { return index }
         index += 1
     }
     return nil
@@ -843,7 +817,9 @@ private func seek(_ bytes: [UInt8], from start: Int, limit: Int, ascii: String, 
 private func seekByte(_ bytes: [UInt8], from start: Int, limit: Int, byte: UInt8, allowNewline: Bool) -> Int? {
     var index = start
     while index < limit {
-        if !allowNewline, bytes[index] == 0x0A || bytes[index] == 0x0D { return nil }
+        if !allowNewline, bytes[index] == ASCIIByte.lineFeed || bytes[index] == ASCIIByte.carriageReturn {
+            return nil
+        }
         if bytes[index] == byte { return index }
         index += 1
     }
@@ -893,7 +869,7 @@ private func emphasisSpans(bytes: [UInt8], range: Range<Int>, mask: ByteMask) ->
             continue
         }
         let marker = bytes[index]
-        if (marker == 0x2A || marker == 0x5F), !isEscaped(bytes, index) {
+        if (marker == ASCIIByte.asterisk || marker == ASCIIByte.underscore), !isEscaped(bytes, index) {
             let length = runLength(bytes, index, marker: marker, limit: range.upperBound)
             let before = flankingClass(beforeByte: index, bytes: bytes, range: range, mask: mask)
             let after = flankingClass(afterByte: index + length, bytes: bytes, range: range, mask: mask)
@@ -934,9 +910,7 @@ private func emphasisSpans(bytes: [UInt8], range: Range<Int>, mask: ByteMask) ->
                 let closerByte = closer.startByte
                 spans.append(RawSpan(byteRange: openerByte..<(openerByte + used), role: role, isSyntax: true))
                 let content = (openerByte + used)..<closerByte
-                if !content.isEmpty {
-                    spans.append(RawSpan(byteRange: content, role: role, isSyntax: false))
-                }
+                if !content.isEmpty { spans.append(RawSpan(byteRange: content, role: role, isSyntax: false)) }
                 spans.append(RawSpan(byteRange: closerByte..<(closerByte + used), role: role, isSyntax: true))
                 delimiters[openerIndex].remaining -= used
                 delimiters[closerIndex].startByte += used
@@ -946,9 +920,7 @@ private func emphasisSpans(bytes: [UInt8], range: Range<Int>, mask: ByteMask) ->
             }
             openerIndex -= 1
         }
-        if !matched || delimiters[closerIndex].remaining == 0 {
-            closerIndex += 1
-        }
+        if !matched || delimiters[closerIndex].remaining == 0 { closerIndex += 1 }
     }
     return spans
 }
@@ -968,7 +940,7 @@ private func emphasisMatchAllowed(_ opener: DelimiterRun, _ closer: DelimiterRun
 private func flanking(marker: UInt8, before: FlankingClass, after: FlankingClass) -> (Bool, Bool) {
     let leftFlanking = after != .whitespace && !(after == .punctuation && before == .word)
     let rightFlanking = before != .whitespace && !(before == .punctuation && after == .word)
-    if marker == 0x5F {
+    if marker == ASCIIByte.underscore {
         let canOpen = leftFlanking && (!rightFlanking || before == .punctuation)
         let canClose = rightFlanking && (!leftFlanking || after == .punctuation)
         return (canOpen, canClose)
@@ -991,12 +963,14 @@ private func flankingClass(afterByte index: Int, bytes: [UInt8], range: Range<In
 
 private func flankingClass(of byte: UInt8) -> FlankingClass {
     switch byte {
-    case 0x20, 0x09, 0x0A, 0x0D, 0x0B, 0x0C:
+    case ASCIIByte.space, ASCIIByte.tab, ASCIIByte.lineFeed, ASCIIByte.carriageReturn, ASCIIByte.verticalTab, ASCIIByte.formFeed:
         return .whitespace
-    case 0x21...0x2F, 0x3A...0x40, 0x5B...0x60, 0x7B...0x7E:
+    case ASCIIByte.exclamationMark...ASCIIByte.slash,
+        ASCIIByte.colon...ASCIIByte.atSign,
+        ASCIIByte.leftBracket...ASCIIByte.backtick,
+        ASCIIByte.leftBrace...ASCIIByte.tilde:
         return .punctuation
-    default:
-        return .word
+    default: return .word
     }
 }
 
@@ -1007,12 +981,8 @@ private func closingBracket(bytes: [UInt8], from start: Int, limit: Int, mask: B
             index = end
             continue
         }
-        if bytes[index] == 0x5D && !isEscaped(bytes, index) {
-            return index
-        }
-        if bytes[index] == 0x0A || bytes[index] == 0x5B {
-            return nil
-        }
+        if bytes[index] == ASCIIByte.rightBracket && !isEscaped(bytes, index) { return index }
+        if bytes[index] == ASCIIByte.lineFeed || bytes[index] == ASCIIByte.leftBracket { return nil }
         index += DocumentBuffer.scalarWidth(bytes, index).0
     }
     return nil
@@ -1022,14 +992,14 @@ private func closingParenthesis(bytes: [UInt8], from start: Int, limit: Int) -> 
     var index = start
     var depth = 1
     while index < limit {
-        if bytes[index] == 0x0A { return nil }
-        if bytes[index] == 0x5C {
+        if bytes[index] == ASCIIByte.lineFeed { return nil }
+        if bytes[index] == ASCIIByte.backslash {
             index += min(2, limit - index)
             continue
         }
-        if bytes[index] == 0x28 {
+        if bytes[index] == ASCIIByte.leftParenthesis {
             depth += 1
-        } else if bytes[index] == 0x29 {
+        } else if bytes[index] == ASCIIByte.rightParenthesis {
             depth -= 1
             if depth == 0 { return index + 1 }
         }
@@ -1042,13 +1012,11 @@ private func autolinkEnd(bytes: [UInt8], open: Int, limit: Int) -> Int? {
     let start = open + 1
     guard start < limit else { return nil }
     var index = start
-    while index < limit && bytes[index] != 0x3E && bytes[index] != 0x20 && bytes[index] != 0x0A {
+    while index < limit && bytes[index] != ASCIIByte.greaterThan && bytes[index] != ASCIIByte.space && bytes[index] != ASCIIByte.lineFeed {
         index += 1
     }
-    guard index < limit, bytes[index] == 0x3E, index > start else { return nil }
-    if hasWebScheme(bytes, start, end: index) || looksLikeEmail(bytes, start, end: index) {
-        return index
-    }
+    guard index < limit, bytes[index] == ASCIIByte.greaterThan, index > start else { return nil }
+    if hasWebScheme(bytes, start, end: index) || looksLikeEmail(bytes, start, end: index) { return index }
     return nil
 }
 
@@ -1059,10 +1027,8 @@ private func startsWebAddress(_ bytes: [UInt8], _ index: Int, limit: Int) -> Boo
     ]
     for scheme in schemes where index + scheme.count <= limit {
         if Array(bytes[index..<(index + scheme.count)]) == scheme {
-            let previous = index > 0 ? bytes[index - 1] : 0x20
-            if flankingClass(of: previous) != .word {
-                return true
-            }
+            let previous = index > 0 ? bytes[index - 1] : ASCIIByte.space
+            if flankingClass(of: previous) != .word { return true }
         }
     }
     return false
@@ -1072,12 +1038,14 @@ private func webAddressEnd(_ bytes: [UInt8], _ index: Int, limit: Int) -> Int {
     var end = index
     while end < limit {
         let byte = bytes[end]
-        if byte <= 0x20 || byte == 0x3C { break }
+        if byte <= ASCIIByte.space || byte == ASCIIByte.lessThan { break }
         end += 1
     }
     while end > index {
         let byte = bytes[end - 1]
-        if byte == 0x2E || byte == 0x2C || byte == 0x3B || byte == 0x3A || byte == 0x21 || byte == 0x3F {
+        let trailingPunctuation = byte == ASCIIByte.period || byte == ASCIIByte.comma || byte == ASCIIByte.semicolon
+            || byte == ASCIIByte.colon || byte == ASCIIByte.exclamationMark || byte == ASCIIByte.questionMark
+        if trailingPunctuation {
             end -= 1
             continue
         }
@@ -1097,22 +1065,24 @@ private func hasWebScheme(_ bytes: [UInt8], _ start: Int, end: Int) -> Bool {
 
 private func looksLikeEmail(_ bytes: [UInt8], _ start: Int, end: Int) -> Bool {
     let slice = bytes[start..<end]
-    guard let at = slice.firstIndex(of: 0x40), at > slice.startIndex, at < slice.endIndex - 1 else { return false }
-    return slice[slice.startIndex].isASCIILetter && slice.contains(0x2E)
+    guard let at = slice.firstIndex(of: ASCIIByte.atSign), at > slice.startIndex, at < slice.endIndex - 1 else {
+        return false
+    }
+    return slice[slice.startIndex].isASCIILetter && slice.contains(ASCIIByte.period)
 }
 
 private func headingPrefix(bytes: [UInt8], range: Range<Int>) -> (role: HighlightRole, marker: Range<Int>, content: Range<Int>)? {
     var index = range.lowerBound
-    let lead = leadingByteCount(bytes, from: index, to: range.upperBound, columnLimit: 3)
+    let lead = leadingByteCount(bytes, from: index, to: range.upperBound, columnLimit: MarkdownScanLimit.maximumOpeningIndent)
     index += lead
     let hashStart = index
     var hashes = 0
-    while index < range.upperBound && bytes[index] == 0x23 && hashes < 7 {
+    while index < range.upperBound && bytes[index] == ASCIIByte.hash && hashes < MarkdownScanLimit.maximumHeadingLevel + 1 {
         hashes += 1
         index += 1
     }
-    guard (1...6).contains(hashes) else { return nil }
-    guard index == range.upperBound || bytes[index] == 0x20 || bytes[index] == 0x09 else { return nil }
+    guard (1...MarkdownScanLimit.maximumHeadingLevel).contains(hashes) else { return nil }
+    guard index == range.upperBound || bytes[index].isHorizontalSpace else { return nil }
     let markerEnd = index < range.upperBound ? index + 1 : index
     return (HighlightRole.heading(level: hashes), hashStart..<min(markerEnd, range.upperBound), min(markerEnd, range.upperBound)..<range.upperBound)
 }
@@ -1128,7 +1098,9 @@ private func append(
 ) {
     guard byteRange.upperBound > byteRange.lowerBound else { return }
     let sourceLines = lineHint.map { [$0] } ?? lines
-    guard let span = RawSpan(byteRange: byteRange, role: role, isSyntax: isSyntax).span(bytes: bytes, lines: sourceLines) else { return }
+    guard let span = RawSpan(byteRange: byteRange, role: role, isSyntax: isSyntax).span(bytes: bytes, lines: sourceLines) else {
+        return
+    }
     spans.append(span)
 }
 
@@ -1158,11 +1130,11 @@ private func leadingByteCount(_ bytes: [UInt8], from start: Int, to end: Int, co
     var index = start
     var columns = 0
     while index < end && columns < columnLimit {
-        if bytes[index] == 0x20 {
+        if bytes[index] == ASCIIByte.space {
             columns += 1
             index += 1
-        } else if bytes[index] == 0x09 {
-            let next = columns + (4 - (columns % 4))
+        } else if bytes[index] == ASCIIByte.tab {
+            let next = columns + (MarkdownScanLimit.tabColumnWidth - (columns % MarkdownScanLimit.tabColumnWidth))
             if next > columnLimit { break }
             columns = next
             index += 1
@@ -1176,8 +1148,8 @@ private func leadingByteCount(_ bytes: [UInt8], from start: Int, to end: Int, co
 private func trimSpaces(_ bytes: [UInt8], _ range: Range<Int>) -> Range<Int> {
     var lower = range.lowerBound
     var upper = range.upperBound
-    while lower < upper && (bytes[lower] == 0x20 || bytes[lower] == 0x09) { lower += 1 }
-    while upper > lower && (bytes[upper - 1] == 0x20 || bytes[upper - 1] == 0x09) { upper -= 1 }
+    while lower < upper && (bytes[lower].isHorizontalSpace) { lower += 1 }
+    while upper > lower && (bytes[upper - 1].isHorizontalSpace) { upper -= 1 }
     return lower..<upper
 }
 
@@ -1188,18 +1160,6 @@ private func runLength(_ bytes: [UInt8], _ start: Int, marker: UInt8, limit: Int
 }
 
 private func isEscaped(_ bytes: [UInt8], _ index: Int) -> Bool {
-    var slashCount = 0
-    var cursor = index - 1
-    while cursor >= 0 && bytes[cursor] == 0x5C {
-        slashCount += 1
-        cursor -= 1
-    }
-    return slashCount % 2 == 1
+    isEscapedByte(bytes, index)
 }
 
-private extension UInt8 {
-    var isASCIIDigit: Bool { self >= 0x30 && self <= 0x39 }
-    var isASCIILetter: Bool {
-        (self >= 0x41 && self <= 0x5A) || (self >= 0x61 && self <= 0x7A)
-    }
-}

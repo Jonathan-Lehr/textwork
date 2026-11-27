@@ -1,5 +1,3 @@
-import Foundation
-
 /// A language the fenced-code tokenizer knows.
 enum FencedCodeLanguage: Equatable, Sendable {
     case swift
@@ -85,23 +83,17 @@ enum FencedCodeTokenizer {
         guard range.upperBound > range.lowerBound else { return [] }
         var tokens: [FencedCodeToken] = []
         switch language {
-        case .swift:
-            scanSwift(bytes: bytes, range: range, state: &state, into: &tokens)
-        case .json:
-            scanJSON(bytes: bytes, range: range, into: &tokens)
-        case .shell:
-            scanShell(bytes: bytes, range: range, into: &tokens)
-        case .html:
-            scanHTML(bytes: bytes, range: range, state: &state, into: &tokens)
+        case .swift: scanSwift(bytes: bytes, range: range, state: &state, into: &tokens)
+        case .json: scanJSON(bytes: bytes, range: range, into: &tokens)
+        case .shell: scanShell(bytes: bytes, range: range, into: &tokens)
+        case .html: scanHTML(bytes: bytes, range: range, state: &state, into: &tokens)
         }
         return tokens
     }
 
     /// HTML for a fenced code body. Unknown languages are escaped and not colored.
     static func html(for text: String, languageName: String?) -> String {
-        guard let languageName, let language = language(named: languageName) else {
-            return escapeRaw(text)
-        }
+        guard let languageName, let language = language(named: languageName) else { return escapeRaw(text) }
         let bytes = Array(text.utf8)
         var state = FencedCodeScanState()
         var html = ""
@@ -109,7 +101,7 @@ enum FencedCodeTokenizer {
         var index = 0
         while index <= bytes.count {
             let atEnd = index == bytes.count
-            let newline = !atEnd && bytes[index] == 0x0A
+            let newline = !atEnd && bytes[index] == ASCIIByte.lineFeed
             if atEnd || newline {
                 let line = lineStart..<index
                 if !line.isEmpty {
@@ -168,12 +160,12 @@ private let jsonKeywords: Set<String> = ["true", "false", "null"]
 private func infoWord(bytes: [UInt8], range: Range<Int>) -> String? {
     var index = range.lowerBound
     var columns = 0
-    while index < range.upperBound && columns < 4 {
-        if bytes[index] == 0x20 {
+    while index < range.upperBound && columns < MarkdownScanLimit.codeBlockIndent {
+        if bytes[index] == ASCIIByte.space {
             columns += 1
             index += 1
-        } else if bytes[index] == 0x09 {
-            columns += 4
+        } else if bytes[index] == ASCIIByte.tab {
+            columns += MarkdownScanLimit.tabColumnWidth
             index += 1
         } else {
             break
@@ -181,13 +173,13 @@ private func infoWord(bytes: [UInt8], range: Range<Int>) -> String? {
     }
     guard index < range.upperBound else { return nil }
     let marker = bytes[index]
-    guard marker == 0x60 || marker == 0x7E else { return nil }
+    guard marker == ASCIIByte.backtick || marker == ASCIIByte.tilde else { return nil }
     while index < range.upperBound && bytes[index] == marker { index += 1 }
-    while index < range.upperBound && (bytes[index] == 0x20 || bytes[index] == 0x09) { index += 1 }
+    while index < range.upperBound && (bytes[index].isHorizontalSpace) { index += 1 }
     let start = index
     while index < range.upperBound {
         let byte = bytes[index]
-        if byte == 0x20 || byte == 0x09 { break }
+        if byte.isHorizontalSpace { break }
         index += 1
     }
     guard index > start else { return nil }
@@ -218,19 +210,19 @@ private func scanSwift(
     }
     while index < limit {
         let byte = bytes[index]
-        if byte == 0x2F, index + 1 < limit, bytes[index + 1] == 0x2F {
+        if byte == ASCIIByte.slash, index + 1 < limit, bytes[index + 1] == ASCIIByte.slash {
             appendToken(index..<limit, role: .codeComment, into: &tokens)
             return
         }
-        if byte == 0x2F, index + 1 < limit, bytes[index + 1] == 0x2A {
+        if byte == ASCIIByte.slash, index + 1 < limit, bytes[index + 1] == ASCIIByte.asterisk {
             let open = index
             index += 2
             state.blockCommentDepth = 1
             index = consumeSwiftBlockComment(bytes, from: index, limit: limit, state: &state, into: &tokens, openAt: open)
             continue
         }
-        if byte == 0x22 {
-            if index + 2 < limit, bytes[index + 1] == 0x22, bytes[index + 2] == 0x22 {
+        if byte == ASCIIByte.quotationMark {
+            if index + 2 < limit, bytes[index + 1] == ASCIIByte.quotationMark, bytes[index + 2] == ASCIIByte.quotationMark {
                 let open = index
                 index += 3
                 if let close = tripleQuote(bytes, from: index, limit: limit) {
@@ -243,34 +235,34 @@ private func scanSwift(
                 }
                 continue
             }
-            index = consumeQuotedString(bytes, from: index, limit: limit, quote: 0x22, role: .codeString, into: &tokens)
+            index = consumeQuotedString(bytes, from: index, limit: limit, quote: ASCIIByte.quotationMark, role: .codeString, into: &tokens)
             continue
         }
-        if byte == 0x40, index + 1 < limit, isIdentifierStart(bytes[index + 1]) {
+        if byte == ASCIIByte.atSign, index + 1 < limit, isIdentifierStart(bytes[index + 1]) {
             let start = index
             index += 1
             index = consumeIdentifier(bytes, from: index, limit: limit)
             appendToken(start..<index, role: .codeAttribute, into: &tokens)
             continue
         }
-        if byte == 0x7B {
+        if byte == ASCIIByte.leftBrace {
             openSwiftBrace(&state)
             index += 1
             continue
         }
-        if byte == 0x7D {
+        if byte == ASCIIByte.rightBrace {
             closeSwiftBrace(&state)
             index += 1
             continue
         }
-        if byte == 0x28, state.nextBraceOpensFunctionBody {
+        if byte == ASCIIByte.leftParenthesis, state.nextBraceOpensFunctionBody {
             state.scanningParameterList = true
             state.awaitingPropertyName = false
             state.awaitingLocalName = false
             index += 1
             continue
         }
-        if byte == 0x29, state.scanningParameterList {
+        if byte == ASCIIByte.rightParenthesis, state.scanningParameterList {
             state.scanningParameterList = false
             index += 1
             continue
@@ -282,58 +274,74 @@ private func scanSwift(
             continue
         }
         if isIdentifierStart(byte) {
-            let start = index
-            index = consumeIdentifier(bytes, from: index, limit: limit)
-            let word = String(decoding: bytes[start..<index], as: UTF8.self)
-            let followsDot = identifierFollowsDot(bytes, start: start, lineStart: range.lowerBound)
-            if swiftKeywords.contains(word) {
-                appendToken(start..<index, role: .codeKeyword, into: &tokens)
-                noteSwiftKeyword(word, state: &state)
-            } else if state.awaitingFunctionName {
-                state.awaitingFunctionName = false
-                state.awaitingPropertyName = false
-                state.awaitingLocalName = false
-                if state.scopes.last?.kind == .typeBody {
-                    recordFunction(word, state: &state)
-                }
-            } else if state.awaitingPropertyName {
-                state.awaitingPropertyName = false
-                recordProperty(word, state: &state)
-                appendToken(start..<index, role: .codeMember, into: &tokens)
-            } else if state.scanningParameterList, !isTypeName(word, firstByte: byte) {
-                state.pendingParameterNames.insert(word)
-            } else if isClosureParameter(word, bytes: bytes, end: index, limit: limit, state: state) {
-                recordLocal(word, state: &state)
-            } else if state.awaitingLocalName {
-                state.awaitingLocalName = false
-                recordLocal(word, state: &state)
-            } else if isSystemTypeName(word) {
-                appendToken(start..<index, role: .codeSystemType, into: &tokens)
-            } else if byte >= 0x41 && byte <= 0x5A {
-                appendToken(start..<index, role: .codeType, into: &tokens)
-            } else if followsDot {
-                let role: HighlightRole = declaredTypeMember(word, state: state) ? .codeMember : .codeOtherMember
-                appendToken(start..<index, role: role, into: &tokens)
-            } else if localNameShadowsProperty(word, state: state) {
-                // A local or parameter hides the property, so this use stays plain.
-            } else if barePropertyReference(word, state: state) {
-                appendToken(start..<index, role: .codeMember, into: &tokens)
-            } else if insideTypeBody(state),
-                      assignmentFollows(bytes, end: index, limit: limit) {
-                recordProperty(word, state: &state)
-                appendToken(start..<index, role: .codeMember, into: &tokens)
-            } else if identifierPrecedesParenthesis(bytes, end: index, limit: limit) {
-                let role: HighlightRole = declaredTypeFunction(word, state: state) ? .codeMember : .codeOtherMember
-                appendToken(start..<index, role: role, into: &tokens)
-            }
+            index = colorSwiftIdentifier(
+                bytes: bytes,
+                from: index,
+                limit: limit,
+                lineStart: range.lowerBound,
+                state: &state,
+                into: &tokens
+            )
             continue
         }
-        if byte != 0x20 && byte != 0x09 && byte != 0x0A && byte != 0x0D {
+        if byte != ASCIIByte.space && byte != ASCIIByte.tab && byte != ASCIIByte.lineFeed && byte != ASCIIByte.carriageReturn {
             state.awaitingPropertyName = false
             state.awaitingLocalName = false
         }
         index += DocumentBuffer.scalarWidth(bytes, index).0
     }
+}
+
+private func colorSwiftIdentifier(
+    bytes: [UInt8],
+    from start: Int,
+    limit: Int,
+    lineStart: Int,
+    state: inout FencedCodeScanState,
+    into tokens: inout [FencedCodeToken]
+) -> Int {
+    let end = consumeIdentifier(bytes, from: start, limit: limit)
+    let word = String(decoding: bytes[start..<end], as: UTF8.self)
+    let firstByte = bytes[start]
+    let followsDot = identifierFollowsDot(bytes, start: start, lineStart: lineStart)
+    if swiftKeywords.contains(word) {
+        appendToken(start..<end, role: .codeKeyword, into: &tokens)
+        noteSwiftKeyword(word, state: &state)
+    } else if state.awaitingFunctionName {
+        state.awaitingFunctionName = false
+        state.awaitingPropertyName = false
+        state.awaitingLocalName = false
+        if state.scopes.last?.kind == .typeBody { recordFunction(word, state: &state) }
+    } else if state.awaitingPropertyName {
+        state.awaitingPropertyName = false
+        recordProperty(word, state: &state)
+        appendToken(start..<end, role: .codeMember, into: &tokens)
+    } else if state.scanningParameterList, !isTypeName(word, firstByte: firstByte) {
+        state.pendingParameterNames.insert(word)
+    } else if isClosureParameter(word, bytes: bytes, end: end, limit: limit, state: state) {
+        recordLocal(word, state: &state)
+    } else if state.awaitingLocalName {
+        state.awaitingLocalName = false
+        recordLocal(word, state: &state)
+    } else if isSystemTypeName(word) {
+        appendToken(start..<end, role: .codeSystemType, into: &tokens)
+    } else if firstByte >= ASCIIByte.uppercaseA && firstByte <= ASCIIByte.uppercaseZ {
+        appendToken(start..<end, role: .codeType, into: &tokens)
+    } else if followsDot {
+        let role: HighlightRole = declaredTypeMember(word, state: state) ? .codeMember : .codeOtherMember
+        appendToken(start..<end, role: role, into: &tokens)
+    } else if localNameShadowsProperty(word, state: state) {
+        // A local or parameter hides the property, so this use stays plain.
+    } else if barePropertyReference(word, state: state) {
+        appendToken(start..<end, role: .codeMember, into: &tokens)
+    } else if insideTypeBody(state), assignmentFollows(bytes, end: end, limit: limit) {
+        recordProperty(word, state: &state)
+        appendToken(start..<end, role: .codeMember, into: &tokens)
+    } else if identifierPrecedesParenthesis(bytes, end: end, limit: limit) {
+        let role: HighlightRole = declaredTypeFunction(word, state: state) ? .codeMember : .codeOtherMember
+        appendToken(start..<end, role: role, into: &tokens)
+    }
+    return end
 }
 
 private func scanJSON(
@@ -345,11 +353,11 @@ private func scanJSON(
     let limit = range.upperBound
     while index < limit {
         let byte = bytes[index]
-        if byte == 0x22 {
-            index = consumeQuotedString(bytes, from: index, limit: limit, quote: 0x22, role: .codeString, into: &tokens)
+        if byte == ASCIIByte.quotationMark {
+            index = consumeQuotedString(bytes, from: index, limit: limit, quote: ASCIIByte.quotationMark, role: .codeString, into: &tokens)
             continue
         }
-        if byte == 0x2D, index + 1 < limit, isDigit(bytes[index + 1]) {
+        if byte == ASCIIByte.hyphen, index + 1 < limit, isDigit(bytes[index + 1]) {
             index = consumeNumber(bytes, from: index, limit: limit, into: &tokens)
             continue
         }
@@ -361,9 +369,7 @@ private func scanJSON(
             let start = index
             index = consumeIdentifier(bytes, from: index, limit: limit)
             let word = String(decoding: bytes[start..<index], as: UTF8.self)
-            if jsonKeywords.contains(word) {
-                appendToken(start..<index, role: .codeKeyword, into: &tokens)
-            }
+            if jsonKeywords.contains(word) { appendToken(start..<index, role: .codeKeyword, into: &tokens) }
             continue
         }
         index += DocumentBuffer.scalarWidth(bytes, index).0
@@ -379,11 +385,11 @@ private func scanShell(
     let limit = range.upperBound
     while index < limit {
         let byte = bytes[index]
-        if byte == 0x23, !previousIsDollar(bytes, index) {
+        if byte == ASCIIByte.hash, !previousIsDollar(bytes, index) {
             appendToken(index..<limit, role: .codeComment, into: &tokens)
             return
         }
-        if byte == 0x27 || byte == 0x22 {
+        if byte == ASCIIByte.apostrophe || byte == ASCIIByte.quotationMark {
             index = consumeQuotedString(bytes, from: index, limit: limit, quote: byte, role: .codeString, into: &tokens)
             continue
         }
@@ -395,9 +401,7 @@ private func scanShell(
             let start = index
             index = consumeIdentifier(bytes, from: index, limit: limit)
             let word = String(decoding: bytes[start..<index], as: UTF8.self)
-            if shellKeywords.contains(word) {
-                appendToken(start..<index, role: .codeKeyword, into: &tokens)
-            }
+            if shellKeywords.contains(word) { appendToken(start..<index, role: .codeKeyword, into: &tokens) }
             continue
         }
         index += DocumentBuffer.scalarWidth(bytes, index).0
@@ -435,9 +439,9 @@ private func scanHTML(
             }
             continue
         }
-        if bytes[index] == 0x3C, index + 1 < limit {
+        if bytes[index] == ASCIIByte.lessThan, index + 1 < limit {
             let next = bytes[index + 1]
-            if isIdentifierStart(next) || next == 0x2F {
+            if isIdentifierStart(next) || next == ASCIIByte.slash {
                 index = consumeHTMLTag(bytes, from: index, limit: limit, into: &tokens)
                 continue
             }
@@ -453,15 +457,13 @@ private func consumeHTMLTag(
     into tokens: inout [FencedCodeToken]
 ) -> Int {
     var index = start + 1
-    if index < limit, bytes[index] == 0x2F { index += 1 }
+    if index < limit, bytes[index] == ASCIIByte.slash { index += 1 }
     let nameStart = index
     while index < limit, isNameByte(bytes[index]) { index += 1 }
-    if index > nameStart {
-        appendToken(nameStart..<index, role: .codeTag, into: &tokens)
-    }
-    while index < limit, bytes[index] != 0x3E {
+    if index > nameStart { appendToken(nameStart..<index, role: .codeTag, into: &tokens) }
+    while index < limit, bytes[index] != ASCIIByte.greaterThan {
         let byte = bytes[index]
-        if byte == 0x22 || byte == 0x27 {
+        if byte == ASCIIByte.quotationMark || byte == ASCIIByte.apostrophe {
             index = consumeQuotedString(bytes, from: index, limit: limit, quote: byte, role: .codeString, into: &tokens)
             continue
         }
@@ -488,12 +490,12 @@ private func consumeSwiftBlockComment(
 ) -> Int {
     var index = start
     while index + 1 < limit, state.blockCommentDepth > 0 {
-        if bytes[index] == 0x2F, bytes[index + 1] == 0x2A {
+        if bytes[index] == ASCIIByte.slash, bytes[index + 1] == ASCIIByte.asterisk {
             state.blockCommentDepth += 1
             index += 2
             continue
         }
-        if bytes[index] == 0x2A, bytes[index + 1] == 0x2F {
+        if bytes[index] == ASCIIByte.asterisk, bytes[index + 1] == ASCIIByte.slash {
             state.blockCommentDepth -= 1
             index += 2
             continue
@@ -519,7 +521,7 @@ private func consumeQuotedString(
     var index = start + 1
     while index < limit {
         let byte = bytes[index]
-        if byte == 0x5C, index + 1 < limit {
+        if byte == ASCIIByte.backslash, index + 1 < limit {
             index += 2
             continue
         }
@@ -527,7 +529,7 @@ private func consumeQuotedString(
             index += 1
             break
         }
-        if byte == 0x0A { break }
+        if byte == ASCIIByte.lineFeed { break }
         index += 1
     }
     appendToken(start..<index, role: role, into: &tokens)
@@ -541,20 +543,22 @@ private func consumeNumber(
     into tokens: inout [FencedCodeToken]
 ) -> Int {
     var index = start
-    if bytes[index] == 0x2D, index + 1 < limit { index += 1 }
-    if index + 1 < limit, bytes[index] == 0x30, bytes[index + 1] == 0x78 || bytes[index + 1] == 0x58 {
+    if bytes[index] == ASCIIByte.hyphen, index + 1 < limit { index += 1 }
+    if index + 1 < limit, bytes[index] == ASCIIByte.digitZero, bytes[index + 1] == ASCIIByte.lowercaseX || bytes[index + 1] == ASCIIByte.uppercaseX {
         index += 2
-        while index < limit, isHexDigit(bytes[index]) || bytes[index] == 0x5F { index += 1 }
+        while index < limit, isHexDigit(bytes[index]) || bytes[index] == ASCIIByte.underscore { index += 1 }
     } else {
-        while index < limit, isDigit(bytes[index]) || bytes[index] == 0x5F { index += 1 }
-        if index < limit, bytes[index] == 0x2E, index + 1 < limit, isDigit(bytes[index + 1]) {
+        while index < limit, isDigit(bytes[index]) || bytes[index] == ASCIIByte.underscore { index += 1 }
+        if index < limit, bytes[index] == ASCIIByte.period, index + 1 < limit, isDigit(bytes[index + 1]) {
             index += 1
-            while index < limit, isDigit(bytes[index]) || bytes[index] == 0x5F { index += 1 }
+            while index < limit, isDigit(bytes[index]) || bytes[index] == ASCIIByte.underscore { index += 1 }
         }
-        if index < limit, bytes[index] == 0x65 || bytes[index] == 0x45 {
+        if index < limit, bytes[index] == ASCIIByte.lowercaseE || bytes[index] == ASCIIByte.uppercaseE {
             let exponent = index + 1
             var cursor = exponent
-            if cursor < limit, bytes[cursor] == 0x2B || bytes[cursor] == 0x2D { cursor += 1 }
+            if cursor < limit, bytes[cursor] == ASCIIByte.plus || bytes[cursor] == ASCIIByte.hyphen {
+                cursor += 1
+            }
             if cursor < limit, isDigit(bytes[cursor]) {
                 index = cursor
                 while index < limit, isDigit(bytes[index]) { index += 1 }
@@ -574,7 +578,7 @@ private func consumeIdentifier(_ bytes: [UInt8], from start: Int, limit: Int) ->
 private func tripleQuote(_ bytes: [UInt8], from start: Int, limit: Int) -> Int? {
     var index = start
     while index + 2 < limit {
-        if bytes[index] == 0x22, bytes[index + 1] == 0x22, bytes[index + 2] == 0x22 {
+        if bytes[index] == ASCIIByte.quotationMark, bytes[index + 1] == ASCIIByte.quotationMark, bytes[index + 2] == ASCIIByte.quotationMark {
             return index + 3
         }
         index += 1
@@ -587,9 +591,7 @@ private func seekASCII(_ bytes: [UInt8], from start: Int, limit: Int, ascii: Str
     guard !needle.isEmpty else { return nil }
     var index = start
     while index + needle.count <= limit {
-        if Array(bytes[index..<(index + needle.count)]) == needle {
-            return index + needle.count
-        }
+        if Array(bytes[index..<(index + needle.count)]) == needle { return index + needle.count }
         index += 1
     }
     return nil
@@ -628,12 +630,12 @@ private func htmlLine(bytes: [UInt8], range: Range<Int>, tokens: [FencedCodeToke
 }
 
 private func previousIsDollar(_ bytes: [UInt8], _ index: Int) -> Bool {
-    index > 0 && bytes[index - 1] == 0x24
+    index > 0 && bytes[index - 1] == ASCIIByte.dollarSign
 }
 
-private func isDigit(_ byte: UInt8) -> Bool { byte >= 0x30 && byte <= 0x39 }
+private func isDigit(_ byte: UInt8) -> Bool { byte >= ASCIIByte.digitZero && byte <= ASCIIByte.digitNine }
 private func isHexDigit(_ byte: UInt8) -> Bool {
-    isDigit(byte) || (byte >= 0x41 && byte <= 0x46) || (byte >= 0x61 && byte <= 0x66)
+    isDigit(byte) || (byte >= ASCIIByte.uppercaseA && byte <= ASCIIByte.uppercaseF) || (byte >= ASCIIByte.lowercaseA && byte <= ASCIIByte.lowercaseF)
 }
 private func noteSwiftKeyword(_ word: String, state: inout FencedCodeScanState) {
     switch word {
@@ -687,9 +689,7 @@ private func openSwiftBrace(_ state: inout FencedCodeScanState) {
 }
 
 private func closeSwiftBrace(_ state: inout FencedCodeScanState) {
-    if !state.scopes.isEmpty {
-        state.scopes.removeLast()
-    }
+    if !state.scopes.isEmpty { state.scopes.removeLast() }
     state.awaitingPropertyName = false
     state.awaitingLocalName = false
 }
@@ -725,9 +725,7 @@ private func recordLocal(_ name: String, state: inout FencedCodeScanState) {
 private func barePropertyReference(_ name: String, state: FencedCodeScanState) -> Bool {
     for scope in state.scopes.reversed() {
         if scope.localNames.contains(name) { return false }
-        if scope.kind == .typeBody {
-            return scope.propertyNames.contains(name)
-        }
+        if scope.kind == .typeBody { return scope.propertyNames.contains(name) }
     }
     return false
 }
@@ -741,7 +739,7 @@ private func localNameShadowsProperty(_ name: String, state: FencedCodeScanState
 }
 
 private func isTypeName(_ word: String, firstByte: UInt8) -> Bool {
-    isSystemTypeName(word) || (firstByte >= 0x41 && firstByte <= 0x5A)
+    isSystemTypeName(word) || (firstByte >= ASCIIByte.uppercaseA && firstByte <= ASCIIByte.uppercaseZ)
 }
 
 private func isClosureParameter(
@@ -762,11 +760,11 @@ private func closureIntroducesParameter(_ bytes: [UInt8], from end: Int, limit: 
     var index = end
     while index < limit {
         let byte = bytes[index]
-        if byte == 0x20 || byte == 0x09 || byte == 0x0A || byte == 0x0D {
+        if byte.isHorizontalSpace || byte == ASCIIByte.lineFeed || byte == ASCIIByte.carriageReturn {
             index += 1
             continue
         }
-        if byte == 0x3D || byte == 0x7B { return false }
+        if byte == ASCIIByte.equalsSign || byte == ASCIIByte.leftBrace { return false }
         if isIdentifierStart(byte) {
             let start = index
             index = consumeIdentifier(bytes, from: index, limit: limit)
@@ -849,7 +847,7 @@ private func insideTypeBody(_ state: FencedCodeScanState) -> Bool {
 /// True for `name =` and `name +=`, and false for comparisons such as `name ==`.
 private func assignmentFollows(_ bytes: [UInt8], end: Int, limit: Int) -> Bool {
     var index = end
-    while index < limit, bytes[index] == 0x20 || bytes[index] == 0x09 {
+    while index < limit, bytes[index].isHorizontalSpace {
         index += 1
     }
     guard index < limit, isAssignmentOperatorByte(bytes[index]) else { return false }
@@ -865,10 +863,11 @@ private func assignmentFollows(_ bytes: [UInt8], end: Int, limit: Int) -> Bool {
 
 private func isAssignmentOperatorByte(_ byte: UInt8) -> Bool {
     switch byte {
-    case 0x21, 0x25, 0x26, 0x2A, 0x2B, 0x2D, 0x2F, 0x3C, 0x3D, 0x3E, 0x5E, 0x7C:
+    case ASCIIByte.exclamationMark, ASCIIByte.percentSign, ASCIIByte.ampersand, ASCIIByte.asterisk,
+        ASCIIByte.plus, ASCIIByte.hyphen, ASCIIByte.slash, ASCIIByte.lessThan, ASCIIByte.equalsSign,
+        ASCIIByte.greaterThan, ASCIIByte.caret, ASCIIByte.verticalBar:
         return true
-    default:
-        return false
+    default: return false
     }
 }
 
@@ -878,8 +877,8 @@ private func identifierFollowsDot(_ bytes: [UInt8], start: Int, lineStart: Int) 
     while index > lineStart {
         index -= 1
         let byte = bytes[index]
-        if byte == 0x20 || byte == 0x09 { continue }
-        return byte == 0x2E
+        if byte.isHorizontalSpace { continue }
+        return byte == ASCIIByte.period
     }
     return false
 }
@@ -889,17 +888,17 @@ private func identifierPrecedesParenthesis(_ bytes: [UInt8], end: Int, limit: In
     var index = end
     while index < limit {
         let byte = bytes[index]
-        if byte == 0x20 || byte == 0x09 {
+        if byte.isHorizontalSpace {
             index += 1
             continue
         }
-        return byte == 0x28
+        return byte == ASCIIByte.leftParenthesis
     }
     return false
 }
 
 private func isIdentifierStart(_ byte: UInt8) -> Bool {
-    (byte >= 0x41 && byte <= 0x5A) || (byte >= 0x61 && byte <= 0x7A) || byte == 0x5F
+    byte.isASCIILetter || byte == ASCIIByte.underscore
 }
 private func isIdentifierByte(_ byte: UInt8) -> Bool { isIdentifierStart(byte) || isDigit(byte) }
-private func isNameByte(_ byte: UInt8) -> Bool { isIdentifierByte(byte) || byte == 0x2D || byte == 0x3A }
+private func isNameByte(_ byte: UInt8) -> Bool { isIdentifierByte(byte) || byte == ASCIIByte.hyphen || byte == ASCIIByte.colon }

@@ -28,9 +28,7 @@ func makeDocument(utf8ByteCount: Int) -> String {
     let utf8 = text.utf8
     let limit = utf8.index(utf8.startIndex, offsetBy: utf8ByteCount)
     guard let stringLimit = String.Index(limit, within: text) else { return text }
-    if let newline = text[..<stringLimit].lastIndex(of: "\n") {
-        return String(text[...newline])
-    }
+    if let newline = text[..<stringLimit].lastIndex(of: "\n") { return String(text[...newline]) }
     return String(text[..<stringLimit])
 }
 

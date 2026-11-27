@@ -29,14 +29,14 @@ final class EditorTypographyTests: XCTestCase {
         XCTAssertEqual(heading.fontName, "Menlo-Bold")
         XCTAssertEqual(heading.pointSize, NSFont.systemFontSize + 8)
 
-        let italic = configuration.fontAddingItalic(to: body)
+        let italic = body.addingItalic()
         XCTAssertEqual(italic.fontName, "Menlo-Italic")
         XCTAssertEqual(italic.pointSize, body.pointSize)
-        let bold = configuration.fontAddingBold(to: body)
+        let bold = body.addingBold()
         XCTAssertEqual(bold.fontName, "Menlo-Bold")
         XCTAssertEqual(bold.pointSize, body.pointSize)
-        XCTAssertEqual(configuration.fontAddingBold(to: italic).fontName, "Menlo-BoldItalic")
-        XCTAssertEqual(configuration.fontAddingItalic(to: bold).fontName, "Menlo-BoldItalic")
+        XCTAssertEqual(italic.addingBold().fontName, "Menlo-BoldItalic")
+        XCTAssertEqual(bold.addingItalic().fontName, "Menlo-BoldItalic")
         XCTAssertEqual(configuration.paragraphStyle().lineSpacing, 2)
     }
 
@@ -146,12 +146,8 @@ final class EditorTypographyTests: XCTestCase {
 
     func testPreviewCodeLineHeightIsTheDeclaredLength() async throws {
         let application = NSApplication.shared
-        if application.activationPolicy() != .accessory {
-            application.setActivationPolicy(.accessory)
-        }
-        if !application.isRunning {
-            application.finishLaunching()
-        }
+        if application.activationPolicy() != .accessory { application.setActivationPolicy(.accessory) }
+        if !application.isRunning { application.finishLaunching() }
         let metrics = try await previewCodeMetrics(appearance: .aqua)
         defer { closePreviewWindows() }
         let codeLineHeight = try XCTUnwrap(metrics["codeLineHeight"] as? Double)
@@ -165,12 +161,8 @@ final class EditorTypographyTests: XCTestCase {
     func testWriteTypographySnapshotsWhenRequested() async throws {
         guard let directory = ProcessInfo.processInfo.environment["TEXTWORK_TYPOGRAPHY_SNAPSHOTS"] else { return }
         let application = NSApplication.shared
-        if application.activationPolicy() != .accessory {
-            application.setActivationPolicy(.accessory)
-        }
-        if !application.isRunning {
-            application.finishLaunching()
-        }
+        if application.activationPolicy() != .accessory { application.setActivationPolicy(.accessory) }
+        if !application.isRunning { application.finishLaunching() }
         let folder = URL(fileURLWithPath: directory, isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let editorURL = folder.appendingPathComponent("editor_inline_code.png")
@@ -420,13 +412,9 @@ final class EditorTypographyTests: XCTestCase {
     }
 
     private func findWebView(in view: NSView) -> WKWebView? {
-        if let webView = view as? WKWebView {
-            return webView
-        }
+        if let webView = view as? WKWebView { return webView }
         for subview in view.subviews {
-            if let webView = findWebView(in: subview) {
-                return webView
-            }
+            if let webView = findWebView(in: subview) { return webView }
         }
         return nil
     }

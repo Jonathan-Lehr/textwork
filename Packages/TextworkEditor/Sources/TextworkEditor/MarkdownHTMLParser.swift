@@ -86,9 +86,7 @@ private struct BlockParser {
                 index += 1
             }
             if index >= end { break }
-            if takeReferenceDefinition() {
-                continue
-            }
+            if takeReferenceDefinition() { continue }
             if let fence = takeFence(until: end) {
                 blocks.append(fence)
             } else if let heading = takeATXHeading() {
@@ -102,14 +100,12 @@ private struct BlockParser {
                 blocks.append(takeBlockQuote(until: end))
             } else if listMarker(lines[index]) != nil {
                 blocks.append(takeList(until: end))
-            } else if leadingColumnCount(lines[index]) >= 4 {
+            } else if leadingColumnCount(lines[index]) >= MarkdownScanLimit.codeBlockIndent {
                 blocks.append(takeIndentedCode(until: end))
             } else {
                 blocks.append(takeParagraph(until: end))
             }
-            if index == start {
-                index += 1
-            }
+            if index == start { index += 1 }
         }
         return blocks
     }
@@ -127,9 +123,7 @@ private struct BlockParser {
             index += 1
         }
         var text = content.joined(separator: "\n")
-        if !content.isEmpty {
-            text += "\n"
-        }
+        if !content.isEmpty { text += "\n" }
         return .codeBlock(language: languageName(opening.info), text: text)
     }
 
@@ -231,9 +225,7 @@ private struct BlockParser {
                         if !blankRun.isEmpty { loose = true }
                         break
                     }
-                    if next.indent <= markerIndent {
-                        break
-                    }
+                    if next.indent <= markerIndent { break }
                 }
                 let indent = leadingColumnCount(line)
                 let nestedMarker = listMarker(line)?.indent ?? -1
@@ -270,7 +262,7 @@ private struct BlockParser {
                 index += 1
                 continue
             }
-            if leadingColumnCount(line) >= 4 {
+            if leadingColumnCount(line) >= MarkdownScanLimit.codeBlockIndent {
                 content.append(contentsOf: blanks)
                 blanks.removeAll()
                 content.append(stripColumns(line, 4))
@@ -280,9 +272,7 @@ private struct BlockParser {
             break
         }
         var text = content.joined(separator: "\n")
-        if !content.isEmpty {
-            text += "\n"
-        }
+        if !content.isEmpty { text += "\n" }
         return .codeBlock(language: nil, text: text)
     }
 
@@ -355,9 +345,7 @@ private func splitLines(_ markdown: String) -> [String] {
         current.unicodeScalars.append(scalar)
         index = scalars.index(after: index)
     }
-    if !current.isEmpty {
-        lines.append(current)
-    }
+    if !current.isEmpty { lines.append(current) }
     return lines
 }
 
@@ -371,7 +359,7 @@ private func leadingColumnCount(_ line: String) -> Int {
         if character == " " {
             column += 1
         } else if character == "\t" {
-            column += 4 - (column % 4)
+            column += MarkdownScanLimit.tabColumnWidth - (column % MarkdownScanLimit.tabColumnWidth)
         } else {
             break
         }
@@ -389,7 +377,7 @@ private func stripColumns(_ line: String, _ columns: Int) -> String {
             column += 1
             index = line.index(after: index)
         } else if line[index] == "\t" {
-            let width = 4 - (column % 4)
+            let width = MarkdownScanLimit.tabColumnWidth - (column % MarkdownScanLimit.tabColumnWidth)
             if width > remaining {
                 let leftover = width - remaining
                 return String(repeating: " ", count: leftover) + line[line.index(after: index)...]
@@ -406,7 +394,7 @@ private func stripColumns(_ line: String, _ columns: Int) -> String {
 
 private func isThematicBreak(_ line: String) -> Bool {
     let indent = leadingColumnCount(line)
-    if indent >= 4 { return false }
+    if indent >= MarkdownScanLimit.codeBlockIndent { return false }
     let content = stripColumns(line, indent)
     guard let marker = content.first(where: { $0 != " " && $0 != "\t" }) else { return false }
     guard marker == "-" || marker == "*" || marker == "_" else { return false }
@@ -418,12 +406,12 @@ private func isThematicBreak(_ line: String) -> Bool {
             return false
         }
     }
-    return count >= 3
+    return count >= MarkdownScanLimit.minimumMarkerRun
 }
 
 private func setextLevel(_ line: String) -> Int? {
     let indent = leadingColumnCount(line)
-    if indent >= 4 { return nil }
+    if indent >= MarkdownScanLimit.codeBlockIndent { return nil }
     let content = stripColumns(line, indent)
     guard let marker = content.first, marker == "=" || marker == "-" else { return nil }
     var index = content.startIndex
@@ -440,14 +428,14 @@ private func setextLevel(_ line: String) -> Int? {
 
 private func atxHeading(_ line: String) -> (level: Int, content: String)? {
     let indent = leadingColumnCount(line)
-    if indent >= 4 { return nil }
+    if indent >= MarkdownScanLimit.codeBlockIndent { return nil }
     var content = stripColumns(line, indent)
     var level = 0
-    while content.first == "#", level < 7 {
+    while content.first == "#", level < MarkdownScanLimit.maximumHeadingLevel + 1 {
         content.removeFirst()
         level += 1
     }
-    guard (1...6).contains(level) else { return nil }
+    guard (1...MarkdownScanLimit.maximumHeadingLevel).contains(level) else { return nil }
     if let first = content.first, first != " ", first != "\t" { return nil }
     while content.first == " " || content.first == "\t" {
         content.removeFirst()
@@ -481,7 +469,7 @@ private func atxHeading(_ line: String) -> (level: Int, content: String)? {
 
 private func fenceOpening(_ line: String) -> FenceOpening? {
     let indent = leadingColumnCount(line)
-    if indent >= 4 { return nil }
+    if indent >= MarkdownScanLimit.codeBlockIndent { return nil }
     let content = stripColumns(line, indent)
     guard let marker = content.first, marker == "`" || marker == "~" else { return nil }
     var length = 0
@@ -490,7 +478,7 @@ private func fenceOpening(_ line: String) -> FenceOpening? {
         length += 1
         index = content.index(after: index)
     }
-    guard length >= 3 else { return nil }
+    guard length >= MarkdownScanLimit.minimumMarkerRun else { return nil }
     let info = content[index...].trimmingCharacters(in: .whitespaces)
     if marker == "`", info.contains("`") { return nil }
     return FenceOpening(marker: marker, length: length, indent: indent, info: info)
@@ -498,7 +486,7 @@ private func fenceOpening(_ line: String) -> FenceOpening? {
 
 private func fenceCloses(_ line: String, marker: Character, minimum: Int) -> Bool {
     let indent = leadingColumnCount(line)
-    if indent >= 4 { return false }
+    if indent >= MarkdownScanLimit.codeBlockIndent { return false }
     let content = stripColumns(line, indent)
     var length = 0
     var index = content.startIndex
@@ -525,18 +513,16 @@ private func languageName(_ info: String) -> String? {
 
 private func isBlockQuoteLine(_ line: String) -> Bool {
     let indent = leadingColumnCount(line)
-    if indent >= 4 { return false }
+    if indent >= MarkdownScanLimit.codeBlockIndent { return false }
     return stripColumns(line, indent).first == ">"
 }
 
 private func stripBlockQuoteMarker(_ line: String) -> String {
-    let indent = min(leadingColumnCount(line), 3)
+    let indent = min(leadingColumnCount(line), MarkdownScanLimit.maximumOpeningIndent)
     var content = stripColumns(line, indent)
     guard content.first == ">" else { return content }
     content.removeFirst()
-    if content.first == " " {
-        content.removeFirst()
-    }
+    if content.first == " " { content.removeFirst() }
     return content
 }
 
@@ -554,7 +540,7 @@ private func interruptsParagraph(_ line: String) -> Bool {
 private func listMarker(_ line: String) -> ListMarkerMatch? {
     if isThematicBreak(line) { return nil }
     let indent = leadingColumnCount(line)
-    if indent >= 4 { return nil }
+    if indent >= MarkdownScanLimit.codeBlockIndent { return nil }
     let rest = stripColumns(line, indent)
     guard let first = rest.first else { return nil }
     var column = indent
@@ -568,7 +554,7 @@ private func listMarker(_ line: String) -> ListMarkerMatch? {
     } else if first.isNumber {
         var digits = 0
         var value = 0
-        while index < rest.endIndex, rest[index].isNumber, digits < 9 {
+        while index < rest.endIndex, rest[index].isNumber, digits < MarkdownScanLimit.maximumOrderedListMarkerDigits {
             value = value * 10 + (rest[index].wholeNumberValue ?? 0)
             digits += 1
             column += 1
@@ -599,7 +585,7 @@ private func listMarker(_ line: String) -> ListMarkerMatch? {
     if rest[index] == " " {
         column += 1
     } else {
-        column += 4 - (column % 4)
+        column += MarkdownScanLimit.tabColumnWidth - (column % MarkdownScanLimit.tabColumnWidth)
     }
     index = rest.index(after: index)
 
@@ -619,7 +605,7 @@ private func listMarker(_ line: String) -> ListMarkerMatch? {
                         if rest[index] == " " {
                             column += 1
                         } else {
-                            column += 4 - (column % 4)
+                            column += MarkdownScanLimit.tabColumnWidth - (column % MarkdownScanLimit.tabColumnWidth)
                         }
                         index = rest.index(after: index)
                     }
@@ -727,12 +713,8 @@ private func tableCells(_ line: String) -> [String] {
         index = line.index(after: index)
     }
     cells.append(current.trimmingCharacters(in: .whitespaces))
-    if cells.first?.isEmpty == true {
-        cells.removeFirst()
-    }
-    if cells.last?.isEmpty == true {
-        cells.removeLast()
-    }
+    if cells.first?.isEmpty == true { cells.removeFirst() }
+    if cells.last?.isEmpty == true { cells.removeLast() }
     return cells
 }
 
@@ -791,15 +773,15 @@ private func tableDelimiter(_ line: String) -> [MarkdownTableAlignment]? {
     return alignments
 }
 
-private struct ParsedReferenceDefinition {
+struct ParsedReferenceDefinition {
     var label: String
     var destination: String
     var title: String?
 }
 
-private func parseReferenceDefinition(_ line: String) -> ParsedReferenceDefinition? {
+func parseReferenceDefinition(_ line: String) -> ParsedReferenceDefinition? {
     let indent = leadingColumnCount(line)
-    if indent > 3 { return nil }
+    if indent > MarkdownScanLimit.maximumOpeningIndent { return nil }
     var content = stripColumns(line, indent)
     guard content.first == "[" else { return nil }
     content.removeFirst()
@@ -848,9 +830,13 @@ private func parseReferenceDefinition(_ line: String) -> ParsedReferenceDefiniti
         content = String(content[index...])
     }
 
+    let separatedBySpace = content.first == " " || content.first == "\t"
     content = trimHorizontalSpace(content)
     var title: String?
-    if let marker = content.first, marker == "\"" || marker == "'" || marker == "(" {
+    if !content.isEmpty {
+        guard separatedBySpace, let marker = content.first, marker == "\"" || marker == "'" || marker == "(" else {
+            return nil
+        }
         let closingMarker: Character = marker == "(" ? ")" : marker
         content.removeFirst()
         guard let end = unescapedDelimiter(in: content, matching: closingMarker) else { return nil }
@@ -863,7 +849,10 @@ private func parseReferenceDefinition(_ line: String) -> ParsedReferenceDefiniti
 }
 
 private func acceptableReferenceLabel(_ label: String) -> Bool {
-    guard label.count <= 999, !normalizeReferenceLabel(label).isEmpty else { return false }
+    let withinLimit = label.unicodeScalars.count <= MarkdownScanLimit.maximumReferenceLabelLength
+    guard withinLimit, !normalizeReferenceLabel(label).isEmpty else {
+        return false
+    }
     var escaped = false
     for character in label {
         if escaped {
@@ -936,8 +925,7 @@ private func resolveBlock(_ block: MarkdownBlock, definitions: ReferenceDefiniti
         return .heading(level: level, inlines: resolveInlines(inlines, definitions: definitions))
     case .paragraph(let inlines):
         return .paragraph(inlines: resolveInlines(inlines, definitions: definitions))
-    case .codeBlock:
-        return block
+    case .codeBlock: return block
     case .blockQuote(let children):
         return .blockQuote(children: resolveReferences(in: children, definitions: definitions))
     case .list(let orderedStart, let tight, let items):
@@ -954,8 +942,7 @@ private func resolveBlock(_ block: MarkdownBlock, definitions: ReferenceDefiniti
             row.map { MarkdownTableCell(inlines: resolveInlines($0.inlines, definitions: definitions)) }
         }
         return .table(alignments: alignments, header: resolvedHeader, rows: resolvedRows)
-    case .thematicBreak:
-        return block
+    case .thematicBreak: return block
     }
 }
 
@@ -982,12 +969,10 @@ private func resolveInline(_ inline: MarkdownInline, definitions: ReferenceDefin
         return [.text(match.opening)] + children + [.text(match.closing)]
     case .emphasis(let children):
         return [.emphasis(children: resolveInlines(children, definitions: definitions))]
-    case .strong(let children):
-        return [.strong(children: resolveInlines(children, definitions: definitions))]
+    case .strong(let children): return [.strong(children: resolveInlines(children, definitions: definitions))]
     case .link(let destination, let title, let children):
         return [.link(destination: destination, title: title, children: resolveInlines(children, definitions: definitions))]
-    case .text, .softBreak, .hardBreak, .code, .image:
-        return [inline]
+    case .text, .softBreak, .hardBreak, .code, .image: return [inline]
     }
 }
 
@@ -1418,9 +1403,7 @@ private struct InlineParser {
                 matched = true
                 break
             }
-            if !matched {
-                closerIndex += 1
-            }
+            if !matched { closerIndex += 1 }
         }
         return pieces.map { piece in
             if case let .delimiter(marker, count, _, _) = piece {
@@ -1433,24 +1416,17 @@ private struct InlineParser {
     func finalize(_ pieces: [InlinePiece]) -> [MarkdownInline] {
         pieces.map { piece in
             switch piece {
-            case .text(let text):
-                return .text(text)
-            case .softBreak:
-                return .softBreak
-            case .hardBreak:
-                return .hardBreak
-            case .code(let code):
-                return .code(code)
+            case .text(let text): return .text(text)
+            case .softBreak: return .softBreak
+            case .hardBreak: return .hardBreak
+            case .code(let code): return .code(code)
             case .image(let destination, let alternativeText):
                 return .image(destination: destination, alternativeText: alternativeText)
             case .link(let destination, let title, let children):
                 return .link(destination: destination, title: title, children: children)
-            case .unresolvedReference(let match):
-                return .unresolvedReference(match)
-            case .emphasis(let children):
-                return .emphasis(children: finalize(children))
-            case .strong(let children):
-                return .strong(children: finalize(children))
+            case .unresolvedReference(let match): return .unresolvedReference(match)
+            case .emphasis(let children): return .emphasis(children: finalize(children))
+            case .strong(let children): return .strong(children: finalize(children))
             case .delimiter(let marker, let count, _, _):
                 return .text(String(repeating: marker, count: count))
             }
@@ -1461,20 +1437,13 @@ private struct InlineParser {
 private func plainText(_ inlines: [MarkdownInline]) -> String {
     inlines.map { inline in
         switch inline {
-        case .text(let text):
-            return text
-        case .softBreak, .hardBreak:
-            return " "
-        case .code(let code):
-            return code
-        case .emphasis(let children), .strong(let children):
-            return plainText(children)
-        case .link(_, _, let children):
-            return plainText(children)
-        case .image(_, let alternativeText):
-            return alternativeText
-        case .unresolvedReference(let match):
-            return match.opening + plainText(match.children) + match.closing
+        case .text(let text): return text
+        case .softBreak, .hardBreak: return " "
+        case .code(let code): return code
+        case .emphasis(let children), .strong(let children): return plainText(children)
+        case .link(_, _, let children): return plainText(children)
+        case .image(_, let alternativeText): return alternativeText
+        case .unresolvedReference(let match): return match.opening + plainText(match.children) + match.closing
         }
     }.joined()
 }
@@ -1519,18 +1488,20 @@ private func flanking(marker: Character, before: Character?, after: Character?) 
 
 private func flankingClass(_ character: Character?) -> FlankingClass {
     guard let character else { return .whitespace }
-    if character == " " || character == "\t" || character == "\n" || character == "\r" {
-        return .whitespace
-    }
-    if isASCIIPunctuation(character) {
-        return .punctuation
-    }
+    if character == " " || character == "\t" || character == "\n" || character == "\r" { return .whitespace }
+    if isASCIIPunctuation(character) { return .punctuation }
     return .word
 }
 
 private func isASCIIPunctuation(_ character: Character) -> Bool {
     guard let value = character.asciiValue else { return false }
-    return (value >= 33 && value <= 47) || (value >= 58 && value <= 64) || (value >= 91 && value <= 96) || (value >= 123 && value <= 126)
+    let punctuation = [
+        ASCIIByte.exclamationMark...ASCIIByte.slash,
+        ASCIIByte.colon...ASCIIByte.atSign,
+        ASCIIByte.leftBracket...ASCIIByte.backtick,
+        ASCIIByte.leftBrace...ASCIIByte.tilde,
+    ]
+    return punctuation.contains { $0.contains(value) }
 }
 
 private func isEmailAddress(_ text: String) -> Bool {
@@ -1545,7 +1516,9 @@ private func isEmailAddress(_ text: String) -> Bool {
 private func isAutolinkURL(_ text: String) -> Bool {
     guard let colon = text.firstIndex(of: ":"), colon != text.startIndex else { return false }
     let scheme = text[..<colon]
-    guard scheme.count <= 32, let first = scheme.first, isASCIILetter(first) else { return false }
+    guard scheme.count <= MarkdownScanLimit.maximumAutolinkSchemeLength, let first = scheme.first, isASCIILetter(first) else {
+        return false
+    }
     for character in scheme {
         if isASCIILetter(character) || character.isNumber || character == "+" || character == "-" || character == "." {
             continue

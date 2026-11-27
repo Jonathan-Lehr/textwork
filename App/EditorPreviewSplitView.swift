@@ -33,9 +33,8 @@ struct EditorPreviewSplitView<Editor: View, Preview: View>: NSViewRepresentable 
         previewHost.sizingOptions = []
         splitView.addArrangedSubview(editorHost)
         splitView.addArrangedSubview(previewHost)
-        let flexible = NSLayoutConstraint.Priority(250)
-        splitView.setHoldingPriority(flexible, forSubviewAt: 0)
-        splitView.setHoldingPriority(flexible, forSubviewAt: 1)
+        splitView.setHoldingPriority(.defaultLow, forSubviewAt: 0)
+        splitView.setHoldingPriority(.defaultLow, forSubviewAt: 1)
 
         context.coordinator.editorHost = editorHost
         context.coordinator.previewHost = previewHost
@@ -60,9 +59,7 @@ struct EditorPreviewSplitView<Editor: View, Preview: View>: NSViewRepresentable 
             guard width > editorPaneMinimum + previewPaneMinimum else { return }
             didApplyInitialPosition = true
             let savedKey = "NSSplitView Subview Frames \(editorPreviewAutosaveName)"
-            if UserDefaults.standard.object(forKey: savedKey) != nil {
-                return
-            }
+            if UserDefaults.standard.object(forKey: savedKey) != nil { return }
             let previewWidth = max(previewPaneMinimum, width * 0.4)
             let editorWidth = width - previewWidth - splitView.dividerThickness
             splitView.setPosition(max(editorWidth, editorPaneMinimum), ofDividerAt: 0)

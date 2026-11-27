@@ -10,12 +10,8 @@ final class PreviewPaneTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         let application = NSApplication.shared
-        if application.activationPolicy() != .accessory {
-            application.setActivationPolicy(.accessory)
-        }
-        if !application.isRunning {
-            application.finishLaunching()
-        }
+        if application.activationPolicy() != .accessory { application.setActivationPolicy(.accessory) }
+        if !application.isRunning { application.finishLaunching() }
     }
 
     func testPreviewFillsThePaneAndKeepsContrast() async throws {
@@ -75,13 +71,9 @@ final class PreviewPaneTests: XCTestCase {
     }
 
     private func findWebView(in view: NSView) -> WKWebView? {
-        if let webView = view as? WKWebView {
-            return webView
-        }
+        if let webView = view as? WKWebView { return webView }
         for subview in view.subviews {
-            if let webView = findWebView(in: subview) {
-                return webView
-            }
+            if let webView = findWebView(in: subview) { return webView }
         }
         return nil
     }
@@ -89,9 +81,7 @@ final class PreviewPaneTests: XCTestCase {
     private func view(_ hit: NSView?, isInside webView: WKWebView) -> Bool {
         var current = hit
         while let view = current {
-            if view === webView {
-                return true
-            }
+            if view === webView { return true }
             current = view.superview
         }
         return false

@@ -67,8 +67,6 @@ public struct HighlightSpan: Codable, Sendable, Equatable, Hashable {
         self.isSyntax = isSyntax
     }
 
-    public var utf16Count: Int { endUTF16 - startUTF16 }
-
     func shifted(by delta: Int) -> HighlightSpan {
         HighlightSpan(
             startUTF16: startUTF16 + delta,
