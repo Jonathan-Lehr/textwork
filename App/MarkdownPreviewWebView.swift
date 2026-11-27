@@ -19,6 +19,23 @@ struct MarkdownPreviewWebView: View {
 }
 
 #if os(macOS)
+/// The page uses the `canvas` color. The rubber-band area is this view's own
+/// background, so it has to be resolved again when the appearance changes.
+private final class PreviewWebView: WKWebView {
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyPageBackground()
+    }
+
+    func applyPageBackground() {
+        var color = NSColor.textBackgroundColor
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            color = NSColor.textBackgroundColor.usingColorSpace(.sRGB) ?? NSColor.textBackgroundColor
+        }
+        underPageBackgroundColor = color
+    }
+}
+
 private struct MarkdownPreviewRepresentable: NSViewRepresentable {
     var bodyHTML: String
     var resourceDirectory: URL?
@@ -36,6 +53,28 @@ private struct MarkdownPreviewRepresentable: NSViewRepresentable {
     }
 }
 #else
+/// The page uses the `canvas` color. The rubber-band area is this view's own
+/// background, so it has to be resolved again when the appearance changes.
+private final class PreviewWebView: WKWebView {
+    override init(frame: CGRect, configuration: WKWebViewConfiguration) {
+        super.init(frame: frame, configuration: configuration)
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: Self, _: UITraitCollection) in
+            view.applyPageBackground()
+        }
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+    }
+
+    func applyPageBackground() {
+        let color = UIColor.systemBackground.resolvedColor(with: traitCollection)
+        backgroundColor = color
+        scrollView.backgroundColor = color
+        underPageBackgroundColor = color
+    }
+}
+
 private struct MarkdownPreviewRepresentable: UIViewRepresentable {
     var bodyHTML: String
     var resourceDirectory: URL?
@@ -78,20 +117,17 @@ final class MarkdownPreviewCoordinator: NSObject, WKNavigationDelegate {
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         configuration.setURLSchemeHandler(handler, forURLScheme: MarkdownHTMLRenderer.previewScheme)
 
-        let webView = WKWebView(frame: .zero, configuration: configuration)
+        let webView = PreviewWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = self
         webView.allowsBackForwardNavigationGestures = false
         #if os(macOS)
         webView.allowsMagnification = false
-        webView.underPageBackgroundColor = .textBackgroundColor
         webView.setAccessibilityLabel("Markdown preview")
         #else
         webView.isOpaque = false
-        webView.backgroundColor = .systemBackground
-        webView.scrollView.backgroundColor = .systemBackground
-        webView.underPageBackgroundColor = .systemBackground
         webView.accessibilityLabel = "Markdown preview"
         #endif
+        webView.applyPageBackground()
         #if DEBUG
         webView.isInspectable = true
         #endif
@@ -99,6 +135,7 @@ final class MarkdownPreviewCoordinator: NSObject, WKNavigationDelegate {
     }
 
     func update(bodyHTML: String, resourceDirectory: URL?, webView: WKWebView) {
+        (webView as? PreviewWebView)?.applyPageBackground()
         handler.setResourceDirectory(resourceDirectory)
         let directoryKey = resourceDirectory?.standardizedFileURL.path
         if !hasRequestedPreviewDocument || directoryKey != loadedDirectory {
