@@ -97,7 +97,7 @@ struct MarkdownTextEditor: NSViewRepresentable {
         var configuration: EditorConfiguration
         var snapshot: HighlightSnapshot
         var isApplyingHighlight = false
-        private var isBaseTypingAttributesScheduled = false
+        private var isTypingAttributesResetPending = false
         weak var textView: NSTextView?
 
         init(text: Binding<String>, configuration: EditorConfiguration) {
@@ -152,7 +152,7 @@ struct MarkdownTextEditor: NSViewRepresentable {
             isApplyingHighlight = true
             paint(snapshot.spans, ranges: snapshot.invalidatedUTF16Ranges, in: storage, textView: textView)
             isApplyingHighlight = false
-            scheduleBaseTypingAttributes()
+            resetTypingAttributesAfterEdit()
             text = storage.string
         }
 
@@ -186,16 +186,16 @@ struct MarkdownTextEditor: NSViewRepresentable {
             storage.endEditing()
         }
 
-        private func scheduleBaseTypingAttributes() {
-            guard !isBaseTypingAttributesScheduled else { return }
-            isBaseTypingAttributesScheduled = true
+        private func resetTypingAttributesAfterEdit() {
+            guard !isTypingAttributesResetPending else { return }
+            isTypingAttributesResetPending = true
             // A main-actor Task can run inside AppKit's nested run loop, while
             // the selection still covers the deleted text. The main queue runs
             // this only after that call stack returns.
             DispatchQueue.main.async { [weak self] in
                 MainActor.assumeIsolated {
                     guard let self else { return }
-                    self.isBaseTypingAttributesScheduled = false
+                    self.isTypingAttributesResetPending = false
                     self.applyTypingAttributes()
                 }
             }
@@ -302,7 +302,7 @@ struct MarkdownTextEditor: UIViewRepresentable {
         var configuration: EditorConfiguration
         var snapshot: HighlightSnapshot
         var isApplyingHighlight = false
-        private var isBaseTypingAttributesScheduled = false
+        private var isTypingAttributesResetPending = false
         weak var textView: UITextView?
 
         init(text: Binding<String>, configuration: EditorConfiguration) {
@@ -358,7 +358,7 @@ struct MarkdownTextEditor: UIViewRepresentable {
             isApplyingHighlight = true
             paint(snapshot.spans, ranges: snapshot.invalidatedUTF16Ranges, in: storage, textView: textView)
             isApplyingHighlight = false
-            scheduleBaseTypingAttributes()
+            resetTypingAttributesAfterEdit()
             text = storage.string
         }
 
@@ -392,16 +392,16 @@ struct MarkdownTextEditor: UIViewRepresentable {
             storage.endEditing()
         }
 
-        private func scheduleBaseTypingAttributes() {
-            guard !isBaseTypingAttributesScheduled else { return }
-            isBaseTypingAttributesScheduled = true
+        private func resetTypingAttributesAfterEdit() {
+            guard !isTypingAttributesResetPending else { return }
+            isTypingAttributesResetPending = true
             // UIKit can still report a selection that covers the deleted
             // characters until this editing call returns. The main queue runs
             // this only after that call stack returns.
             DispatchQueue.main.async { [weak self] in
                 MainActor.assumeIsolated {
                     guard let self else { return }
-                    self.isBaseTypingAttributesScheduled = false
+                    self.isTypingAttributesResetPending = false
                     self.applyTypingAttributes()
                 }
             }
