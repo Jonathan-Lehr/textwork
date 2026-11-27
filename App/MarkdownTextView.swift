@@ -36,12 +36,9 @@ private func typingAttributesMatch(
     let keys: [NSAttributedString.Key] = [.font, .foregroundColor, .paragraphStyle]
     for key in keys {
         switch (current[key] as? NSObject, desired[key] as? NSObject) {
-        case (nil, nil):
-            continue
-        case let (currentValue?, desiredValue?):
-            if !currentValue.isEqual(desiredValue) { return false }
-        default:
-            return false
+        case (nil, nil): continue
+        case let (currentValue?, desiredValue?): if !currentValue.isEqual(desiredValue) { return false }
+        default: return false
         }
     }
     return true
@@ -237,19 +234,14 @@ private enum HighlightColors {
     ) {
         var font = (storage.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont) ?? configuration.bodyFont()
         switch style.fontTreatment {
-        case .body:
-            font = configuration.bodyFont()
-        case .monospaced:
-            font = configuration.monospacedFont()
-        case .boldMonospaced:
-            font = configuration.boldFont(ofSize: configuration.resolvedFontSize)
+        case .body: font = configuration.bodyFont()
+        case .monospaced: font = configuration.monospacedFont()
+        case .boldMonospaced: font = configuration.boldFont(ofSize: configuration.resolvedFontSize)
         case .heading:
             let size = configuration.resolvedFontSize + headingBoost(span.role)
             font = configuration.boldFont(ofSize: size)
-        case .emphasis:
-            font = configuration.fontAddingItalic(to: font)
-        case .strong:
-            font = configuration.fontAddingBold(to: font)
+        case .emphasis: font = font.addingItalic()
+        case .strong: font = font.addingBold()
         }
         storage.addAttribute(.font, value: font, range: range)
         storage.addAttribute(.foregroundColor, value: configuration.theme.platformColor(style.foreground), range: range)
@@ -448,19 +440,14 @@ private enum HighlightColors {
     ) {
         var font = (storage.attribute(.font, at: range.location, effectiveRange: nil) as? UIFont) ?? configuration.bodyFont()
         switch style.fontTreatment {
-        case .body:
-            font = configuration.bodyFont()
-        case .monospaced:
-            font = configuration.monospacedFont()
-        case .boldMonospaced:
-            font = configuration.boldFont(ofSize: configuration.resolvedFontSize)
+        case .body: font = configuration.bodyFont()
+        case .monospaced: font = configuration.monospacedFont()
+        case .boldMonospaced: font = configuration.boldFont(ofSize: configuration.resolvedFontSize)
         case .heading:
             let size = configuration.resolvedFontSize + headingBoost(span.role)
             font = configuration.boldFont(ofSize: size)
-        case .emphasis:
-            font = configuration.fontAddingItalic(to: font)
-        case .strong:
-            font = configuration.fontAddingBold(to: font)
+        case .emphasis: font = font.addingItalic()
+        case .strong: font = font.addingBold()
         }
         storage.addAttribute(.font, value: font, range: range)
         storage.addAttribute(.foregroundColor, value: configuration.theme.platformColor(style.foreground), range: range)

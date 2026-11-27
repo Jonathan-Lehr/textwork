@@ -345,24 +345,15 @@ final class PreviewResourceHandler: NSObject, WKURLSchemeHandler, @unchecked Sen
 
     private func mimeType(for fileURL: URL) -> String {
         switch fileURL.pathExtension.lowercased() {
-        case "png":
-            return "image/png"
-        case "jpg", "jpeg":
-            return "image/jpeg"
-        case "gif":
-            return "image/gif"
-        case "webp":
-            return "image/webp"
-        case "svg":
-            return "image/svg+xml"
-        case "bmp":
-            return "image/bmp"
-        case "heic":
-            return "image/heic"
-        case "tif", "tiff":
-            return "image/tiff"
-        default:
-            return "application/octet-stream"
+        case "png": return "image/png"
+        case "jpg", "jpeg": return "image/jpeg"
+        case "gif": return "image/gif"
+        case "webp": return "image/webp"
+        case "svg": return "image/svg+xml"
+        case "bmp": return "image/bmp"
+        case "heic": return "image/heic"
+        case "tif", "tiff": return "image/tiff"
+        default: return "application/octet-stream"
         }
     }
 }

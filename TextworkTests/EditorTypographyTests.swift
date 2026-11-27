@@ -29,14 +29,14 @@ final class EditorTypographyTests: XCTestCase {
         XCTAssertEqual(heading.fontName, "Menlo-Bold")
         XCTAssertEqual(heading.pointSize, NSFont.systemFontSize + 8)
 
-        let italic = configuration.fontAddingItalic(to: body)
+        let italic = body.addingItalic()
         XCTAssertEqual(italic.fontName, "Menlo-Italic")
         XCTAssertEqual(italic.pointSize, body.pointSize)
-        let bold = configuration.fontAddingBold(to: body)
+        let bold = body.addingBold()
         XCTAssertEqual(bold.fontName, "Menlo-Bold")
         XCTAssertEqual(bold.pointSize, body.pointSize)
-        XCTAssertEqual(configuration.fontAddingBold(to: italic).fontName, "Menlo-BoldItalic")
-        XCTAssertEqual(configuration.fontAddingItalic(to: bold).fontName, "Menlo-BoldItalic")
+        XCTAssertEqual(italic.addingBold().fontName, "Menlo-BoldItalic")
+        XCTAssertEqual(bold.addingItalic().fontName, "Menlo-BoldItalic")
         XCTAssertEqual(configuration.paragraphStyle().lineSpacing, 2)
     }
 

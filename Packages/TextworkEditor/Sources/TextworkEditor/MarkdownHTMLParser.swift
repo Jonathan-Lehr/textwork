@@ -934,10 +934,8 @@ private func resolveBlock(_ block: MarkdownBlock, definitions: ReferenceDefiniti
     switch block {
     case .heading(let level, let inlines):
         return .heading(level: level, inlines: resolveInlines(inlines, definitions: definitions))
-    case .paragraph(let inlines):
-        return .paragraph(inlines: resolveInlines(inlines, definitions: definitions))
-    case .codeBlock:
-        return block
+    case .paragraph(let inlines): return .paragraph(inlines: resolveInlines(inlines, definitions: definitions))
+    case .codeBlock: return block
     case .blockQuote(let children):
         return .blockQuote(children: resolveReferences(in: children, definitions: definitions))
     case .list(let orderedStart, let tight, let items):
@@ -954,8 +952,7 @@ private func resolveBlock(_ block: MarkdownBlock, definitions: ReferenceDefiniti
             row.map { MarkdownTableCell(inlines: resolveInlines($0.inlines, definitions: definitions)) }
         }
         return .table(alignments: alignments, header: resolvedHeader, rows: resolvedRows)
-    case .thematicBreak:
-        return block
+    case .thematicBreak: return block
     }
 }
 
@@ -980,14 +977,11 @@ private func resolveInline(_ inline: MarkdownInline, definitions: ReferenceDefin
             return [linked, .text(trailing)]
         }
         return [.text(match.opening)] + children + [.text(match.closing)]
-    case .emphasis(let children):
-        return [.emphasis(children: resolveInlines(children, definitions: definitions))]
-    case .strong(let children):
-        return [.strong(children: resolveInlines(children, definitions: definitions))]
+    case .emphasis(let children): return [.emphasis(children: resolveInlines(children, definitions: definitions))]
+    case .strong(let children): return [.strong(children: resolveInlines(children, definitions: definitions))]
     case .link(let destination, let title, let children):
         return [.link(destination: destination, title: title, children: resolveInlines(children, definitions: definitions))]
-    case .text, .softBreak, .hardBreak, .code, .image:
-        return [inline]
+    case .text, .softBreak, .hardBreak, .code, .image: return [inline]
     }
 }
 
@@ -1433,26 +1427,18 @@ private struct InlineParser {
     func finalize(_ pieces: [InlinePiece]) -> [MarkdownInline] {
         pieces.map { piece in
             switch piece {
-            case .text(let text):
-                return .text(text)
-            case .softBreak:
-                return .softBreak
-            case .hardBreak:
-                return .hardBreak
-            case .code(let code):
-                return .code(code)
+            case .text(let text): return .text(text)
+            case .softBreak: return .softBreak
+            case .hardBreak: return .hardBreak
+            case .code(let code): return .code(code)
             case .image(let destination, let alternativeText):
                 return .image(destination: destination, alternativeText: alternativeText)
             case .link(let destination, let title, let children):
                 return .link(destination: destination, title: title, children: children)
-            case .unresolvedReference(let match):
-                return .unresolvedReference(match)
-            case .emphasis(let children):
-                return .emphasis(children: finalize(children))
-            case .strong(let children):
-                return .strong(children: finalize(children))
-            case .delimiter(let marker, let count, _, _):
-                return .text(String(repeating: marker, count: count))
+            case .unresolvedReference(let match): return .unresolvedReference(match)
+            case .emphasis(let children): return .emphasis(children: finalize(children))
+            case .strong(let children): return .strong(children: finalize(children))
+            case .delimiter(let marker, let count, _, _): return .text(String(repeating: marker, count: count))
             }
         }
     }
@@ -1461,20 +1447,13 @@ private struct InlineParser {
 private func plainText(_ inlines: [MarkdownInline]) -> String {
     inlines.map { inline in
         switch inline {
-        case .text(let text):
-            return text
-        case .softBreak, .hardBreak:
-            return " "
-        case .code(let code):
-            return code
-        case .emphasis(let children), .strong(let children):
-            return plainText(children)
-        case .link(_, _, let children):
-            return plainText(children)
-        case .image(_, let alternativeText):
-            return alternativeText
-        case .unresolvedReference(let match):
-            return match.opening + plainText(match.children) + match.closing
+        case .text(let text): return text
+        case .softBreak, .hardBreak: return " "
+        case .code(let code): return code
+        case .emphasis(let children), .strong(let children): return plainText(children)
+        case .link(_, _, let children): return plainText(children)
+        case .image(_, let alternativeText): return alternativeText
+        case .unresolvedReference(let match): return match.opening + plainText(match.children) + match.closing
         }
     }.joined()
 }

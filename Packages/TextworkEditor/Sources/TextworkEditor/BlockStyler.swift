@@ -34,8 +34,7 @@ enum BlockStyler {
                 candidateLabels: &candidateLabels,
                 into: &spans
             )
-        case .fence:
-            styleFence(bytes: bytes, lines: lines, startLine: startLine, endLine: endLine, into: &spans)
+        case .fence: styleFence(bytes: bytes, lines: lines, startLine: startLine, endLine: endLine, into: &spans)
         case .thematic:
             let line = lines[startLine]
             append(line.byteStart..<line.contentByteEnd, role: .thematicBreak, isSyntax: true, bytes: bytes, lines: lines, into: &spans)
@@ -78,8 +77,7 @@ enum BlockStyler {
                 candidateLabels: &candidateLabels,
                 into: &spans
             )
-        case .referenceDefinition:
-            styleReferenceDefinition(bytes: bytes, line: lines[startLine], into: &spans)
+        case .referenceDefinition: styleReferenceDefinition(bytes: bytes, line: lines[startLine], into: &spans)
         case .htmlBlock:
             let range = contentByteRange(lines: lines, startLine: startLine, endLine: endLine)
             spans.append(contentsOf: InlineStyler.htmlSpans(bytes: bytes, range: range, lines: lines, allowMultilineMarkup: true))
@@ -424,15 +422,14 @@ private func styleTable(
 ) {
     for lineIndex in startLine..<endLine {
         let line = lines[lineIndex]
-            if line.kind == .tableDelimiter {
+        if line.kind == .tableDelimiter {
             append(line.byteStart..<line.contentByteEnd, role: .table, isSyntax: true, bytes: bytes, lines: lines, into: &spans)
             continue
         }
         let cells = tableCells(bytes: bytes, line: line)
         for cell in cells {
             switch cell {
-            case .pipe(let range):
-                append(range, role: .table, isSyntax: true, bytes: bytes, lines: lines, into: &spans)
+            case .pipe(let range): append(range, role: .table, isSyntax: true, bytes: bytes, lines: lines, into: &spans)
             case .text(let range):
                 append(range, role: .table, isSyntax: false, bytes: bytes, lines: lines, into: &spans)
                 spans.append(contentsOf: InlineStyler.spans(
@@ -991,12 +988,9 @@ private func flankingClass(afterByte index: Int, bytes: [UInt8], range: Range<In
 
 private func flankingClass(of byte: UInt8) -> FlankingClass {
     switch byte {
-    case 0x20, 0x09, 0x0A, 0x0D, 0x0B, 0x0C:
-        return .whitespace
-    case 0x21...0x2F, 0x3A...0x40, 0x5B...0x60, 0x7B...0x7E:
-        return .punctuation
-    default:
-        return .word
+    case 0x20, 0x09, 0x0A, 0x0D, 0x0B, 0x0C: return .whitespace
+    case 0x21...0x2F, 0x3A...0x40, 0x5B...0x60, 0x7B...0x7E: return .punctuation
+    default: return .word
     }
 }
 

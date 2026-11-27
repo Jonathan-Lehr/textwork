@@ -35,8 +35,8 @@ case .boldMonospaced: font = configuration.boldFont(ofSize: configuration.resolv
 case .heading:
     let size = configuration.resolvedFontSize + headingBoost(span.role)
     font = configuration.boldFont(ofSize: size)
-case .emphasis: font = configuration.fontAddingItalic(to: font)
-case .strong: font = configuration.fontAddingBold(to: font)
+case .emphasis: font = font.addingItalic()
+case .strong: font = font.addingBold()
 }
 ```
 

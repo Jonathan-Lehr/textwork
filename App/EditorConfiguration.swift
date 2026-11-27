@@ -25,14 +25,10 @@ struct EditorTypography: Equatable, Sendable {
 
     static func menloPostScriptName(bold: Bool, italic: Bool) -> String {
         switch (bold, italic) {
-        case (false, false):
-            "Menlo-Regular"
-        case (true, false):
-            "Menlo-Bold"
-        case (false, true):
-            "Menlo-Italic"
-        case (true, true):
-            "Menlo-BoldItalic"
+        case (false, false): "Menlo-Regular"
+        case (true, false): "Menlo-Bold"
+        case (false, true): "Menlo-Italic"
+        case (true, true): "Menlo-BoldItalic"
         }
     }
 
@@ -80,6 +76,33 @@ struct EditorConfiguration: Equatable, Sendable {
 
 #if os(macOS)
 import AppKit
+
+extension NSFont {
+    static func menlo(ofSize size: CGFloat, bold: Bool, italic: Bool) -> NSFont? {
+        NSFont(name: EditorTypography.menloPostScriptName(bold: bold, italic: italic), size: size)
+    }
+
+    func addingBold() -> NSFont {
+        let italic = NSFontManager.shared.traits(of: self).contains(.italicFontMask)
+        if let menlo = menloFace(bold: true, italic: italic) {
+            return menlo
+        }
+        return NSFontManager.shared.convert(self, toHaveTrait: .boldFontMask)
+    }
+
+    func addingItalic() -> NSFont {
+        let bold = NSFontManager.shared.traits(of: self).contains(.boldFontMask)
+        if let menlo = menloFace(bold: bold, italic: true) {
+            return menlo
+        }
+        return NSFontManager.shared.convert(self, toHaveTrait: .italicFontMask)
+    }
+
+    private func menloFace(bold: Bool, italic: Bool) -> NSFont? {
+        guard familyName == EditorTypography.menloFontName else { return nil }
+        return NSFont.menlo(ofSize: pointSize, bold: bold, italic: italic)
+    }
+}
 
 extension EditorConfiguration {
     @MainActor
@@ -139,7 +162,7 @@ extension EditorConfiguration {
 
     func boldFont(ofSize size: CGFloat) -> NSFont {
         if typography.fontName == EditorTypography.menloFontName {
-            if let face = menloFont(ofSize: size, bold: true, italic: false) {
+            if let face = NSFont.menlo(ofSize: size, bold: true, italic: false) {
                 return face
             }
             return NSFont.monospacedSystemFont(ofSize: size, weight: .bold)
@@ -147,48 +170,13 @@ extension EditorConfiguration {
         return NSFontManager.shared.convert(font(ofSize: size), toHaveTrait: .boldFontMask)
     }
 
-    func fontAddingBold(to font: NSFont) -> NSFont {
-        let italic = NSFontManager.shared.traits(of: font).contains(.italicFontMask)
-        if let face = menloFont(matching: font, bold: true, italic: italic) {
-            return face
-        }
-        return NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
-    }
-
-    func fontAddingItalic(to font: NSFont) -> NSFont {
-        let bold = NSFontManager.shared.traits(of: font).contains(.boldFontMask)
-        if let face = menloFont(matching: font, bold: bold, italic: true) {
-            return face
-        }
-        return NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)
-    }
-
     func font(ofSize size: CGFloat) -> NSFont {
         let loaded = typography.fontName.flatMap { NSFont(name: $0, size: size) }
         switch EditorTypography.fontSource(fontName: typography.fontName, nameIsAvailable: loaded != nil) {
-        case .named:
-            return loaded ?? NSFont.systemFont(ofSize: size)
-        case .systemMonospaced:
-            return NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
-        case .system:
-            return NSFont.systemFont(ofSize: size)
+        case .named: return loaded ?? NSFont.systemFont(ofSize: size)
+        case .systemMonospaced: return NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+        case .system: return NSFont.systemFont(ofSize: size)
         }
-    }
-
-    private func menloFont(matching font: NSFont, bold: Bool, italic: Bool) -> NSFont? {
-        guard font.familyName == EditorTypography.menloFontName else { return nil }
-        return menloFont(ofSize: font.pointSize, bold: bold, italic: italic)
-    }
-
-    private func menloFont(ofSize size: CGFloat, bold: Bool, italic: Bool) -> NSFont? {
-        NSFont(name: EditorTypography.menloPostScriptName(bold: bold, italic: italic), size: size)
-    }
-
-    func paragraphStyle() -> NSParagraphStyle {
-        let style = NSMutableParagraphStyle()
-        style.lineSpacing = typography.lineSpacing
-        style.paragraphSpacing = typography.paragraphSpacing
-        return style
     }
 
     var resolvedFontSize: CGFloat {
@@ -197,6 +185,40 @@ extension EditorConfiguration {
 }
 #else
 import UIKit
+
+extension UIFont {
+    static func menlo(ofSize size: CGFloat, bold: Bool, italic: Bool) -> UIFont? {
+        UIFont(name: EditorTypography.menloPostScriptName(bold: bold, italic: italic), size: size)
+    }
+
+    func addingBold() -> UIFont {
+        let italic = fontDescriptor.symbolicTraits.contains(.traitItalic)
+        if let menlo = menloFace(bold: true, italic: italic) {
+            return menlo
+        }
+        return addingSymbolicTrait(.traitBold)
+    }
+
+    func addingItalic() -> UIFont {
+        let bold = fontDescriptor.symbolicTraits.contains(.traitBold)
+        if let menlo = menloFace(bold: bold, italic: true) {
+            return menlo
+        }
+        return addingSymbolicTrait(.traitItalic)
+    }
+
+    private func menloFace(bold: Bool, italic: Bool) -> UIFont? {
+        guard familyName == EditorTypography.menloFontName else { return nil }
+        return UIFont.menlo(ofSize: pointSize, bold: bold, italic: italic)
+    }
+
+    private func addingSymbolicTrait(_ trait: UIFontDescriptor.SymbolicTraits) -> UIFont {
+        var traits = fontDescriptor.symbolicTraits
+        traits.insert(trait)
+        guard let descriptor = fontDescriptor.withSymbolicTraits(traits) else { return self }
+        return UIFont(descriptor: descriptor, size: pointSize)
+    }
+}
 
 extension EditorConfiguration {
     @MainActor
@@ -243,63 +265,21 @@ extension EditorConfiguration {
 
     func boldFont(ofSize size: CGFloat) -> UIFont {
         if typography.fontName == EditorTypography.menloFontName {
-            if let face = menloFont(ofSize: size, bold: true, italic: false) {
+            if let face = UIFont.menlo(ofSize: size, bold: true, italic: false) {
                 return face
             }
             return UIFont.monospacedSystemFont(ofSize: size, weight: .bold)
         }
-        return addingSymbolicTrait(.traitBold, to: font(ofSize: size))
-    }
-
-    func fontAddingBold(to font: UIFont) -> UIFont {
-        let italic = font.fontDescriptor.symbolicTraits.contains(.traitItalic)
-        if let face = menloFont(matching: font, bold: true, italic: italic) {
-            return face
-        }
-        return addingSymbolicTrait(.traitBold, to: font)
-    }
-
-    func fontAddingItalic(to font: UIFont) -> UIFont {
-        let bold = font.fontDescriptor.symbolicTraits.contains(.traitBold)
-        if let face = menloFont(matching: font, bold: bold, italic: true) {
-            return face
-        }
-        return addingSymbolicTrait(.traitItalic, to: font)
+        return font(ofSize: size).addingBold()
     }
 
     func font(ofSize size: CGFloat) -> UIFont {
         let loaded = typography.fontName.flatMap { UIFont(name: $0, size: size) }
         switch EditorTypography.fontSource(fontName: typography.fontName, nameIsAvailable: loaded != nil) {
-        case .named:
-            return loaded ?? UIFont.systemFont(ofSize: size)
-        case .systemMonospaced:
-            return UIFont.monospacedSystemFont(ofSize: size, weight: .regular)
-        case .system:
-            return UIFont.systemFont(ofSize: size)
+        case .named: return loaded ?? UIFont.systemFont(ofSize: size)
+        case .systemMonospaced: return UIFont.monospacedSystemFont(ofSize: size, weight: .regular)
+        case .system: return UIFont.systemFont(ofSize: size)
         }
-    }
-
-    private func menloFont(matching font: UIFont, bold: Bool, italic: Bool) -> UIFont? {
-        guard font.familyName == EditorTypography.menloFontName else { return nil }
-        return menloFont(ofSize: font.pointSize, bold: bold, italic: italic)
-    }
-
-    private func menloFont(ofSize size: CGFloat, bold: Bool, italic: Bool) -> UIFont? {
-        UIFont(name: EditorTypography.menloPostScriptName(bold: bold, italic: italic), size: size)
-    }
-
-    private func addingSymbolicTrait(_ trait: UIFontDescriptor.SymbolicTraits, to font: UIFont) -> UIFont {
-        var traits = font.fontDescriptor.symbolicTraits
-        traits.insert(trait)
-        guard let descriptor = font.fontDescriptor.withSymbolicTraits(traits) else { return font }
-        return UIFont(descriptor: descriptor, size: font.pointSize)
-    }
-
-    func paragraphStyle() -> NSParagraphStyle {
-        let style = NSMutableParagraphStyle()
-        style.lineSpacing = typography.lineSpacing
-        style.paragraphSpacing = typography.paragraphSpacing
-        return style
     }
 
     var resolvedFontSize: CGFloat {
@@ -307,3 +287,21 @@ extension EditorConfiguration {
     }
 }
 #endif
+
+extension NSParagraphStyle {
+    static func with(lineSpacing: CGFloat, paragraphSpacing: CGFloat) -> NSParagraphStyle {
+        let style = NSMutableParagraphStyle()
+        style.lineSpacing = lineSpacing
+        style.paragraphSpacing = paragraphSpacing
+        return style
+    }
+}
+
+extension EditorConfiguration {
+    func paragraphStyle() -> NSParagraphStyle {
+        NSParagraphStyle.with(
+            lineSpacing: typography.lineSpacing,
+            paragraphSpacing: typography.paragraphSpacing
+        )
+    }
+}

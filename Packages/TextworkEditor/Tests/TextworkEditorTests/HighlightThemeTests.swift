@@ -470,12 +470,9 @@ final class HighlightThemeTests: XCTestCase {
         var font = (storage.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont) ?? body
         let manager = NSFontManager.shared
         switch style.fontTreatment {
-        case .body:
-            font = body
-        case .monospaced:
-            font = mono
-        case .boldMonospaced:
-            font = NSFont(name: "Menlo-Bold", size: fontSize) ?? mono
+        case .body: font = body
+        case .monospaced: font = mono
+        case .boldMonospaced: font = NSFont(name: "Menlo-Bold", size: fontSize) ?? mono
         case .heading:
             let boost: CGFloat
             switch span.role {
@@ -484,10 +481,8 @@ final class HighlightThemeTests: XCTestCase {
             default: boost = 2
             }
             font = manager.convert(NSFont.systemFont(ofSize: fontSize + boost), toHaveTrait: .boldFontMask)
-        case .emphasis:
-            font = manager.convert(font, toHaveTrait: .italicFontMask)
-        case .strong:
-            font = manager.convert(font, toHaveTrait: .boldFontMask)
+        case .emphasis: font = manager.convert(font, toHaveTrait: .italicFontMask)
+        case .strong: font = manager.convert(font, toHaveTrait: .boldFontMask)
         }
         storage.addAttribute(.font, value: font, range: range)
         storage.addAttribute(.foregroundColor, value: theme.platformColor(style.foreground), range: range)
@@ -516,14 +511,11 @@ final class HighlightThemeTests: XCTestCase {
             guard let range = range(of: span) else { continue }
             var font = (storage.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont) ?? body
             switch span.role {
-            case .heading1:
-                font = manager.convert(NSFont.systemFont(ofSize: fontSize + 8), toHaveTrait: .boldFontMask)
+            case .heading1: font = manager.convert(NSFont.systemFont(ofSize: fontSize + 8), toHaveTrait: .boldFontMask)
             case .heading2, .heading3, .heading4, .heading5, .heading6:
                 font = manager.convert(NSFont.systemFont(ofSize: fontSize + 3), toHaveTrait: .boldFontMask)
-            case .emphasis:
-                font = manager.convert(font, toHaveTrait: .italicFontMask)
-            case .strong:
-                font = manager.convert(font, toHaveTrait: .boldFontMask)
+            case .emphasis: font = manager.convert(font, toHaveTrait: .italicFontMask)
+            case .strong: font = manager.convert(font, toHaveTrait: .boldFontMask)
             case .codeSpan, .codeBlock:
                 font = mono
                 storage.addAttribute(

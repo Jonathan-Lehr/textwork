@@ -213,8 +213,7 @@ public struct MarkdownHTMLRenderer: Sendable {
 
     private func emitBlock(_ block: MarkdownBlock, unwrapParagraphs: Bool) -> String {
         switch block {
-        case .heading(let level, let inlines):
-            return "<h\(level)>\(emitInlines(inlines))</h\(level)>"
+        case .heading(let level, let inlines): return "<h\(level)>\(emitInlines(inlines))</h\(level)>"
         case .paragraph(let inlines):
             let inner = emitInlines(inlines)
             return unwrapParagraphs ? inner : "<p>\(inner)</p>"
@@ -261,8 +260,7 @@ public struct MarkdownHTMLRenderer: Sendable {
             }
             html += "\n</table>"
             return html
-        case .thematicBreak:
-            return "<hr>"
+        case .thematicBreak: return "<hr>"
         }
     }
 
@@ -279,14 +277,10 @@ public struct MarkdownHTMLRenderer: Sendable {
 
     private func alignmentAttribute(_ alignment: MarkdownTableAlignment) -> String {
         switch alignment {
-        case .none:
-            return ""
-        case .left:
-            return " style=\"text-align: left\""
-        case .center:
-            return " style=\"text-align: center\""
-        case .right:
-            return " style=\"text-align: right\""
+        case .none: return ""
+        case .left: return " style=\"text-align: left\""
+        case .center: return " style=\"text-align: center\""
+        case .right: return " style=\"text-align: right\""
         }
     }
 
@@ -296,18 +290,12 @@ public struct MarkdownHTMLRenderer: Sendable {
 
     private func emitInline(_ inline: MarkdownInline) -> String {
         switch inline {
-        case .text(let text):
-            return escapeText(text)
-        case .softBreak:
-            return "\n"
-        case .hardBreak:
-            return "<br>"
-        case .code(let code):
-            return "<code>\(escapeRaw(code))</code>"
-        case .emphasis(let children):
-            return "<em>\(emitInlines(children))</em>"
-        case .strong(let children):
-            return "<strong>\(emitInlines(children))</strong>"
+        case .text(let text): return escapeText(text)
+        case .softBreak: return "\n"
+        case .hardBreak: return "<br>"
+        case .code(let code): return "<code>\(escapeRaw(code))</code>"
+        case .emphasis(let children): return "<em>\(emitInlines(children))</em>"
+        case .strong(let children): return "<strong>\(emitInlines(children))</strong>"
         case .link(let destination, let title, let children):
             let inner = emitInlines(children)
             guard let href = linkHref(destination) else { return inner }
@@ -339,8 +327,7 @@ public struct MarkdownHTMLRenderer: Sendable {
             return escapeAttribute(decoded)
         }
         switch imageAddressing {
-        case .authored:
-            return escapeAttribute(decoded)
+        case .authored: return escapeAttribute(decoded)
         case .preview:
             let relative = decoded.hasPrefix("/") ? String(decoded.dropFirst()) : decoded
             guard !relative.isEmpty, !relative.hasPrefix("/") else { return nil }
@@ -377,20 +364,13 @@ func escapeRaw(_ string: String) -> String {
     result.reserveCapacity(string.count)
     for character in string {
         switch character {
-        case "&":
-            result.append("&amp;")
-        case "<":
-            result.append("&lt;")
-        case ">":
-            result.append("&gt;")
-        case "\"":
-            result.append("&quot;")
-        case "'":
-            result.append("&#39;")
-        case "\0":
-            result.append("\u{FFFD}")
-        default:
-            result.append(character)
+        case "&": result.append("&amp;")
+        case "<": result.append("&lt;")
+        case ">": result.append("&gt;")
+        case "\"": result.append("&quot;")
+        case "'": result.append("&#39;")
+        case "\0": result.append("\u{FFFD}")
+        default: result.append(character)
         }
     }
     return result

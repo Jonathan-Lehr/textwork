@@ -83,14 +83,10 @@ enum FencedCodeTokenizer {
         guard range.upperBound > range.lowerBound else { return [] }
         var tokens: [FencedCodeToken] = []
         switch language {
-        case .swift:
-            scanSwift(bytes: bytes, range: range, state: &state, into: &tokens)
-        case .json:
-            scanJSON(bytes: bytes, range: range, into: &tokens)
-        case .shell:
-            scanShell(bytes: bytes, range: range, into: &tokens)
-        case .html:
-            scanHTML(bytes: bytes, range: range, state: &state, into: &tokens)
+        case .swift: scanSwift(bytes: bytes, range: range, state: &state, into: &tokens)
+        case .json: scanJSON(bytes: bytes, range: range, into: &tokens)
+        case .shell: scanShell(bytes: bytes, range: range, into: &tokens)
+        case .html: scanHTML(bytes: bytes, range: range, state: &state, into: &tokens)
         }
         return tokens
     }
@@ -863,10 +859,8 @@ private func assignmentFollows(_ bytes: [UInt8], end: Int, limit: Int) -> Bool {
 
 private func isAssignmentOperatorByte(_ byte: UInt8) -> Bool {
     switch byte {
-    case 0x21, 0x25, 0x26, 0x2A, 0x2B, 0x2D, 0x2F, 0x3C, 0x3D, 0x3E, 0x5E, 0x7C:
-        return true
-    default:
-        return false
+    case 0x21, 0x25, 0x26, 0x2A, 0x2B, 0x2D, 0x2F, 0x3C, 0x3D, 0x3E, 0x5E, 0x7C: return true
+    default: return false
     }
 }
 

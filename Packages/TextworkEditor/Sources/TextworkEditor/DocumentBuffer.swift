@@ -210,7 +210,7 @@ enum DocumentBuffer {
                 continue
             }
             lines[index].kind = .paragraph
-            if index + 1 < count, let _ = underlineHeadingLevel(lines[index + 1], bytes: bytes) {
+            if index + 1 < count, underlineHeadingLevel(lines[index + 1], bytes: bytes) != nil {
                 lines[index + 1].kind = .underlineMarker
                 index += 2
                 continue
@@ -234,8 +234,7 @@ enum DocumentBuffer {
         var index = 0
         while index < lines.count {
             switch lines[index].kind {
-            case .blank:
-                index += 1
+            case .blank: index += 1
             case .hashHeading:
                 let level = hashHeadingLevel(lines[index], bytes: bytes)
                 blocks.append((index, index + 1, .hashHeading(level: level)))
@@ -896,18 +895,12 @@ private func completeHTMLTag(_ bytes: [UInt8], tagStart: Int, lineEnd: Int) -> B
 
 private func htmlEndIsSatisfied(_ end: HTMLBlockEnd, line: TextLine, bytes: [UInt8]) -> Bool {
     switch end {
-    case .blankLine:
-        return false
-    case .comment:
-        return lineContains(bytes, line, ascii: "-->")
-    case .processingInstruction:
-        return lineContains(bytes, line, ascii: "?>")
-    case .declaration:
-        return lineContains(bytes, line, ascii: ">")
-    case .characterData:
-        return lineContains(bytes, line, ascii: "]]>")
-    case .closingTag(let needle):
-        return lineContainsCaseInsensitive(bytes, line, needle)
+    case .blankLine: return false
+    case .comment: return lineContains(bytes, line, ascii: "-->")
+    case .processingInstruction: return lineContains(bytes, line, ascii: "?>")
+    case .declaration: return lineContains(bytes, line, ascii: ">")
+    case .characterData: return lineContains(bytes, line, ascii: "]]>")
+    case .closingTag(let needle): return lineContainsCaseInsensitive(bytes, line, needle)
     }
 }
 
