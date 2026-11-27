@@ -17,6 +17,7 @@ final class DocumentHTMLPresenter: NSObject, WKNavigationDelegate {
     private var webView: WKWebView?
     private var window: NSWindow?
     private var loadContinuation: CheckedContinuation<Void, Error>?
+    private var keepsSelfAliveWhilePrinting: DocumentHTMLPresenter?
 
     func pdfDocumentData(html: String, baseURL: URL?, colorScheme: MarkdownHTMLColorScheme) async throws -> Data {
         try await load(html: html, baseURL: baseURL, colorScheme: colorScheme)
@@ -24,19 +25,50 @@ final class DocumentHTMLPresenter: NSObject, WKNavigationDelegate {
         return try await paginatedPDFData()
     }
 
+    /// Builds the print operation after the page has loaded. Does not show the panel.
+    func makePrintOperation(html: String, baseURL: URL?, colorScheme: MarkdownHTMLColorScheme) async throws -> NSPrintOperation {
+        do {
+            try await load(html: html, baseURL: baseURL, colorScheme: colorScheme)
+        } catch {
+            teardown()
+            throw error
+        }
+        guard let webView else {
+            teardown()
+            throw CocoaError(.fileWriteUnknown)
+        }
+        return printOperation(for: webView)
+    }
+
     func printDocument(html: String, baseURL: URL?, colorScheme: MarkdownHTMLColorScheme) async throws {
-        try await load(html: html, baseURL: baseURL, colorScheme: colorScheme)
-        defer { teardown() }
-        guard let webView else { return }
-        let printInfo = (NSPrintInfo.shared.copy() as? NSPrintInfo) ?? NSPrintInfo.shared
-        printInfo.horizontalPagination = .fit
-        printInfo.verticalPagination = .automatic
-        printInfo.isHorizontallyCentered = true
-        printInfo.isVerticallyCentered = false
-        let operation = webView.printOperation(with: printInfo)
+        let documentWindow = NSApp.keyWindow
+        let operation = try await makePrintOperation(html: html, baseURL: baseURL, colorScheme: colorScheme)
         operation.showsPrintPanel = true
         operation.showsProgressPanel = true
-        operation.run()
+        guard let host = documentWindow ?? window else {
+            teardown()
+            throw CocoaError(.fileWriteUnknown)
+        }
+        keepsSelfAliveWhilePrinting = self
+        operation.runModal(
+            for: host,
+            delegate: self,
+            didRun: #selector(printOperationDidRun(_:success:contextInfo:)),
+            contextInfo: nil
+        )
+    }
+
+    func close() {
+        teardown()
+    }
+
+    @objc func printOperationDidRun(
+        _ operation: NSPrintOperation,
+        success: Bool,
+        contextInfo: UnsafeMutableRawPointer?
+    ) {
+        teardown()
+        keepsSelfAliveWhilePrinting = nil
     }
 
     nonisolated static func pageCount(documentHeight: CGFloat, pageHeight: CGFloat) -> Int {
@@ -95,6 +127,9 @@ final class DocumentHTMLPresenter: NSObject, WKNavigationDelegate {
         webView.frame.size = CGSize(width: pageSize.width, height: CGFloat(pageCount) * pageSize.height)
         window?.setContentSize(webView.frame.size)
         webView.layoutSubtreeIfNeeded()
+        guard webView.bounds.width > 0, webView.bounds.height > 0 else {
+            throw CocoaError(.fileWriteUnknown)
+        }
         let document = PDFDocument()
         for index in 0..<pageCount {
             let configuration = WKPDFConfiguration()
@@ -113,6 +148,21 @@ final class DocumentHTMLPresenter: NSObject, WKNavigationDelegate {
             throw CocoaError(.fileWriteUnknown)
         }
         return data
+    }
+
+    private func printOperation(for webView: WKWebView) -> NSPrintOperation {
+        let pageSize = NSPrintInfo.shared.paperSize
+        webView.frame = CGRect(origin: .zero, size: pageSize)
+        window?.setContentSize(pageSize)
+        webView.layoutSubtreeIfNeeded()
+        let printInfo = (NSPrintInfo.shared.copy() as? NSPrintInfo) ?? NSPrintInfo.shared
+        printInfo.horizontalPagination = .fit
+        printInfo.verticalPagination = .automatic
+        printInfo.isHorizontallyCentered = true
+        printInfo.isVerticallyCentered = false
+        let operation = webView.printOperation(with: printInfo)
+        operation.view?.frame = webView.bounds
+        return operation
     }
 
     private func contentHeight(in webView: WKWebView) async throws -> CGFloat {

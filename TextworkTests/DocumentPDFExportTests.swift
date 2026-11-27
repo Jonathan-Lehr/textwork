@@ -26,4 +26,17 @@ final class DocumentPDFExportTests: XCTestCase {
         XCTAssertEqual(bounds.width, paper.width, accuracy: 1)
         XCTAssertEqual(bounds.height, paper.height, accuracy: 1)
     }
+
+    func testPrintOperationViewHasANonZeroFrame() async throws {
+        let html = MarkdownHTMLRenderer().renderDocument("# Title\n\nHello", title: "Note", colorScheme: .light)
+        let presenter = DocumentHTMLPresenter()
+        defer { presenter.close() }
+        let operation = try await presenter.makePrintOperation(html: html, baseURL: nil, colorScheme: .light)
+        let frame = try XCTUnwrap(operation.view?.frame)
+        let paper = NSPrintInfo.shared.paperSize
+        XCTAssertGreaterThan(frame.width, 0)
+        XCTAssertGreaterThan(frame.height, 0)
+        XCTAssertEqual(frame.width, paper.width, accuracy: 1)
+        XCTAssertEqual(frame.height, paper.height, accuracy: 1)
+    }
 }
