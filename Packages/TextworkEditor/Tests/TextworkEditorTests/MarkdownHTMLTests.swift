@@ -206,6 +206,34 @@ final class MarkdownHTMLTests: XCTestCase {
         XCTAssertTrue(document.contains(MarkdownHTMLRenderer.stylesheet))
         XCTAssertTrue(document.contains("background: canvas"))
         XCTAssertFalse(document.contains("--page:"))
+        XCTAssertEqual(MarkdownHTMLRenderer.stylesheet(for: .automatic), MarkdownHTMLRenderer.stylesheet)
+    }
+
+    func testExportDocumentsLockToOneAppearance() {
+        let light = renderer.renderDocument("# Title\n\n<script>alert(1)</script>", title: "Note", colorScheme: .light)
+        XCTAssertTrue(light.hasPrefix("<!DOCTYPE html>"))
+        XCTAssertTrue(light.contains("<style>"))
+        XCTAssertFalse(light.contains("<link"))
+        XCTAssertTrue(light.contains("<title>Note</title>"))
+        XCTAssertTrue(light.contains("<h1>Title</h1>"))
+        XCTAssertTrue(light.contains("color-scheme: light"))
+        XCTAssertFalse(light.contains("light dark"))
+        XCTAssertFalse(light.contains("prefers-color-scheme"))
+        XCTAssertTrue(light.contains(HighlightTheme.standard.body.light.cssHex))
+        XCTAssertFalse(light.contains(HighlightTheme.standard.body.dark.cssHex))
+        XCTAssertTrue(light.contains("script-src 'none'"))
+        XCTAssertFalse(light.contains("<script"))
+        XCTAssertTrue(light.contains("&lt;script&gt;"))
+        XCTAssertTrue(light.contains("background: canvas"))
+
+        let dark = renderer.renderDocument("# Title", title: "Note", colorScheme: .dark)
+        XCTAssertTrue(dark.contains("color-scheme: dark"))
+        XCTAssertFalse(dark.contains("light dark"))
+        XCTAssertFalse(dark.contains("prefers-color-scheme"))
+        XCTAssertTrue(dark.contains(HighlightTheme.standard.body.dark.cssHex))
+        XCTAssertFalse(dark.contains(HighlightTheme.standard.body.light.cssHex))
+        XCTAssertTrue(dark.contains("<style>"))
+        XCTAssertFalse(dark.contains("<link"))
     }
 
     func testPreviewPathsStayInsideTheDocumentDirectory() {

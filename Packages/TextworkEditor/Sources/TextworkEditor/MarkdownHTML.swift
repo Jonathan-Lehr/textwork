@@ -10,6 +10,24 @@ public enum MarkdownImageAddressing: Sendable, Equatable {
     case preview
 }
 
+/// Which appearance an HTML document should paint.
+///
+/// Automatic keeps both palettes and follows the viewer. Light and dark lock
+/// the document to one palette, so a saved file does not follow the viewer.
+public enum MarkdownHTMLColorScheme: Sendable, Equatable {
+    case automatic
+    case light
+    case dark
+
+    var cssColorScheme: String {
+        switch self {
+        case .automatic: "light dark"
+        case .light: "light"
+        case .dark: "dark"
+        }
+    }
+}
+
 /// Renders Markdown to HTML for the preview and for HTML export.
 ///
 /// One pipeline covers both. The grammar is CommonMark plus GitHub-flavored
@@ -28,10 +46,13 @@ public struct MarkdownHTMLRenderer: Sendable {
         self.imageAddressing = imageAddressing
     }
 
-    /// The default stylesheet. The preview and HTML export both embed it.
+    /// The default stylesheet. The preview embeds it. Export can ask for this
+    /// sheet, or for light or dark only.
     ///
-    /// Role colors come from ``HighlightTheme/standard``. Light values sit on
-    /// `:root`. Dark values replace them under `prefers-color-scheme: dark`.
+    /// Role colors come from ``HighlightTheme/standard``. For
+    /// ``MarkdownHTMLColorScheme/automatic``, light values sit on `:root` and
+    /// dark values replace them under `prefers-color-scheme: dark`. Light and
+    /// dark schemes emit only that palette.
     /// Inline code keeps a light gray chip and uses the body text color.
     /// Fenced code uses that same chip, the same 5px corner radius, and
     /// 14px by 16px of padding, in light and dark. Emphasis and strong inherit
@@ -40,22 +61,53 @@ public struct MarkdownHTMLRenderer: Sendable {
     /// (0.86rem at the 15px root). Its line height is 1.3, about 18.50px,
     /// on both `pre` and `pre code`. `pre code` is a block so that length
     /// forms the line boxes.
-    public static let stylesheet: String = {
+    public static func stylesheet(for colorScheme: MarkdownHTMLColorScheme = .automatic) -> String {
+        colorSchemeBlock(for: colorScheme) + "\n" + documentRules
+    }
+
+    public static let stylesheet = stylesheet(for: .automatic)
+
+    private static func colorSchemeBlock(for colorScheme: MarkdownHTMLColorScheme) -> String {
         let theme = HighlightTheme.standard
-        return """
-        :root {
-          color-scheme: light dark;
-        \(theme.previewCustomProperties(forDarkAppearance: false))
-          --table-fill: rgba(0, 0, 0, 0.06);
-          --line: rgba(0, 0, 0, 0.14);
+        switch colorScheme {
+        case .automatic:
+            return """
+            :root {
+              color-scheme: light dark;
+            \(theme.previewCustomProperties(forDarkAppearance: false))
+              --table-fill: rgba(0, 0, 0, 0.06);
+              --line: rgba(0, 0, 0, 0.14);
+            }
+            @media (prefers-color-scheme: dark) {
+              :root {
+            \(theme.previewCustomProperties(forDarkAppearance: true))
+                --table-fill: rgba(255, 255, 255, 0.08);
+                --line: rgba(255, 255, 255, 0.16);
+              }
+            }
+            """
+        case .light:
+            return """
+            :root {
+              color-scheme: light;
+            \(theme.previewCustomProperties(forDarkAppearance: false))
+              --table-fill: rgba(0, 0, 0, 0.06);
+              --line: rgba(0, 0, 0, 0.14);
+            }
+            """
+        case .dark:
+            return """
+            :root {
+              color-scheme: dark;
+            \(theme.previewCustomProperties(forDarkAppearance: true))
+              --table-fill: rgba(255, 255, 255, 0.08);
+              --line: rgba(255, 255, 255, 0.16);
+            }
+            """
         }
-        @media (prefers-color-scheme: dark) {
-          :root {
-        \(theme.previewCustomProperties(forDarkAppearance: true))
-            --table-fill: rgba(255, 255, 255, 0.08);
-            --line: rgba(255, 255, 255, 0.16);
-          }
-        }
+    }
+
+    private static let documentRules = """
         * { box-sizing: border-box; }
         html, body {
           margin: 0;
@@ -138,7 +190,6 @@ public struct MarkdownHTMLRenderer: Sendable {
         hr { border: 0; border-top: 1px solid var(--thematic-break); margin: 1.4em 0; }
         img { max-width: 100%; height: auto; }
         """
-    }()
 
     /// Policy for a document this renderer produced. Page scripts are refused.
     public var contentSecurityPolicy: String {
@@ -153,13 +204,21 @@ public struct MarkdownHTMLRenderer: Sendable {
         emitBlocks(MarkdownHTMLParser.blocks(in: markdown), unwrapParagraphs: false)
     }
 
-    /// Complete document, including the default stylesheet.
-    public func renderDocument(_ markdown: String, title: String = "") -> String {
-        document(wrapping: renderBody(markdown), title: title)
+    /// Complete document, including the stylesheet for `colorScheme`.
+    public func renderDocument(
+        _ markdown: String,
+        title: String = "",
+        colorScheme: MarkdownHTMLColorScheme = .automatic
+    ) -> String {
+        document(wrapping: renderBody(markdown), title: title, colorScheme: colorScheme)
     }
 
     /// Wraps an already rendered body. The preview uses this for the shell page.
-    public func document(wrapping body: String, title: String = "") -> String {
+    public func document(
+        wrapping body: String,
+        title: String = "",
+        colorScheme: MarkdownHTMLColorScheme = .automatic
+    ) -> String {
         let safeTitle = escapeText(title.isEmpty ? "Textwork" : title)
         return """
         <!DOCTYPE html>
@@ -167,11 +226,11 @@ public struct MarkdownHTMLRenderer: Sendable {
         <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta name="color-scheme" content="light dark">
+        <meta name="color-scheme" content="\(colorScheme.cssColorScheme)">
         <meta http-equiv="Content-Security-Policy" content="\(contentSecurityPolicy)">
         <title>\(safeTitle)</title>
         <style>
-        \(Self.stylesheet)
+        \(Self.stylesheet(for: colorScheme))
         </style>
         </head>
         <body>

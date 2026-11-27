@@ -21,6 +21,10 @@ struct EditorScreen: View {
         .onAppear {
             AppearancePreference.stored().applyToApplication()
         }
+        .focusedSceneValue(
+            \.documentExportSource,
+            DocumentExportSource(markdown: document.text, fileURL: fileURL)
+        )
         #else
         GeometryReader { geometry in
             if geometry.size.width >= 760 {
