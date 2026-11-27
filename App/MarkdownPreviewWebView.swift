@@ -163,14 +163,10 @@ final class MarkdownPreviewCoordinator: NSObject, WKNavigationDelegate {
     ) async -> WKNavigationActionPolicy {
         guard let url = navigationAction.request.url else { return .cancel }
         if navigationAction.navigationType == .linkActivated {
-            if let external = externalURL(for: url) {
-                openExternally(external)
-            }
+            if let external = externalURL(for: url) { openExternally(external) }
             return .cancel
         }
-        if url.scheme?.lowercased() == MarkdownHTMLRenderer.previewScheme {
-            return .allow
-        }
+        if url.scheme?.lowercased() == MarkdownHTMLRenderer.previewScheme { return .allow }
         return .cancel
     }
 
@@ -188,9 +184,7 @@ final class MarkdownPreviewCoordinator: NSObject, WKNavigationDelegate {
 
     private func externalURL(for url: URL) -> URL? {
         guard let scheme = url.scheme?.lowercased() else { return nil }
-        if scheme == "http" || scheme == "https" || scheme == "mailto" {
-            return url
-        }
+        if scheme == "http" || scheme == "https" || scheme == "mailto" { return url }
         guard scheme == MarkdownHTMLRenderer.previewScheme else { return nil }
         if url.path == "/preview.html" || url.path.isEmpty { return nil }
         guard let directory = handler.resourceDirectory else { return nil }
@@ -209,9 +203,7 @@ final class MarkdownPreviewCoordinator: NSObject, WKNavigationDelegate {
 final class PreviewResourceHandler: NSObject, WKURLSchemeHandler, @unchecked Sendable {
     static let pageURL: URL = {
         let string = "\(MarkdownHTMLRenderer.previewScheme)://\(MarkdownHTMLRenderer.previewHost)/preview.html"
-        guard let url = URL(string: string) else {
-            preconditionFailure("The preview page URL is valid.")
-        }
+        guard let url = URL(string: string) else { preconditionFailure("The preview page URL is valid.") }
         return url
     }()
 
@@ -239,9 +231,7 @@ final class PreviewResourceHandler: NSObject, WKURLSchemeHandler, @unchecked Sen
         directory = url
         accessingSecurityScope = started
         lock.unlock()
-        if wasAccessing {
-            previous?.stopAccessingSecurityScopedResource()
-        }
+        if wasAccessing { previous?.stopAccessingSecurityScopedResource() }
     }
 
     var resourceDirectory: URL? {
@@ -301,9 +291,7 @@ final class PreviewResourceHandler: NSObject, WKURLSchemeHandler, @unchecked Sen
         let identifier = ObjectIdentifier(task)
         lock.lock()
         let stopped = stoppedIdentifiers.contains(identifier)
-        if stopped {
-            stoppedIdentifiers.remove(identifier)
-        }
+        if stopped { stoppedIdentifiers.remove(identifier) }
         lock.unlock()
         return stopped
     }
@@ -320,9 +308,7 @@ final class PreviewResourceHandler: NSObject, WKURLSchemeHandler, @unchecked Sen
             "Content-Type": mimeType == "text/html" ? "text/html; charset=utf-8" : mimeType,
             "Cache-Control": "no-store",
         ]
-        if let contentSecurityPolicy {
-            headers["Content-Security-Policy"] = contentSecurityPolicy
-        }
+        if let contentSecurityPolicy { headers["Content-Security-Policy"] = contentSecurityPolicy }
         guard let response = HTTPURLResponse(
             url: url,
             statusCode: 200,

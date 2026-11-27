@@ -121,9 +121,7 @@ enum DocumentBuffer {
                     htmlEnd = nil
                 } else {
                     lines[index].kind = .html
-                    if htmlEndIsSatisfied(end, line: line, bytes: bytes) {
-                        htmlEnd = nil
-                    }
+                    if htmlEndIsSatisfied(end, line: line, bytes: bytes) { htmlEnd = nil }
                     index += 1
                     continue
                 }
@@ -198,9 +196,7 @@ enum DocumentBuffer {
             let continuesParagraph = index > 0 && lines[index - 1].kind == .paragraph
             if let opener = htmlBlockOpening(line, bytes: bytes, paragraphContinuation: continuesParagraph) {
                 lines[index].kind = .html
-                if !htmlEndIsSatisfied(opener, line: line, bytes: bytes) {
-                    htmlEnd = opener
-                }
+                if !htmlEndIsSatisfied(opener, line: line, bytes: bytes) { htmlEnd = opener }
                 index += 1
                 continue
             }
@@ -244,9 +240,7 @@ enum DocumentBuffer {
                 while end < lines.count && lines[end].kind == .fenceInside {
                     end += 1
                 }
-                if end < lines.count && lines[end].kind == .fenceClose {
-                    end += 1
-                }
+                if end < lines.count && lines[end].kind == .fenceClose { end += 1 }
                 blocks.append((index, end, .fence))
                 index = end
             case .thematic:
@@ -345,17 +339,13 @@ enum DocumentBuffer {
             }
         }
         let line = lines[low]
-        if target >= line.utf16End {
-            return bytes.count
-        }
+        if target >= line.utf16End { return bytes.count }
         var byteIndex = line.byteStart
         var utf16 = line.utf16Start
         let limit = line.byteEnd
         while byteIndex < limit && utf16 < target {
             let (byteLength, utf16Length) = scalarWidth(bytes, byteIndex)
-            if utf16 + utf16Length > target {
-                break
-            }
+            if utf16 + utf16Length > target { break }
             byteIndex += byteLength
             utf16 += utf16Length
         }
@@ -790,28 +780,18 @@ private func htmlBlockOpening(_ line: TextLine, bytes: [UInt8], paragraphContinu
         }
     }
     if columns > 3 || index >= sliceEnd || bytes[index] != 0x3C { return nil }
-    if hasASCIIPrefix(bytes, at: index, end: sliceEnd, ascii: "<!--") {
-        return .comment
-    }
-    if hasASCIIPrefix(bytes, at: index, end: sliceEnd, ascii: "<![CDATA[") {
-        return .characterData
-    }
+    if hasASCIIPrefix(bytes, at: index, end: sliceEnd, ascii: "<!--") { return .comment }
+    if hasASCIIPrefix(bytes, at: index, end: sliceEnd, ascii: "<![CDATA[") { return .characterData }
     let afterBracket = index + 1
-    if afterBracket < sliceEnd, bytes[afterBracket] == 0x3F {
-        return .processingInstruction
-    }
+    if afterBracket < sliceEnd, bytes[afterBracket] == 0x3F { return .processingInstruction }
     if afterBracket < sliceEnd, bytes[afterBracket] == 0x21 {
         let letterIndex = afterBracket + 1
-        if letterIndex < sliceEnd, bytes[letterIndex].isASCIILetter {
-            return .declaration
-        }
+        if letterIndex < sliceEnd, bytes[letterIndex].isASCIILetter { return .declaration }
         return nil
     }
 
     var nameStart = afterBracket
-    if nameStart < sliceEnd, bytes[nameStart] == 0x2F {
-        nameStart += 1
-    }
+    if nameStart < sliceEnd, bytes[nameStart] == 0x2F { nameStart += 1 }
     guard nameStart < sliceEnd, bytes[nameStart].isASCIILetter else { return nil }
     var nameEnd = nameStart + 1
     while nameEnd < sliceEnd {
@@ -827,12 +807,8 @@ private func htmlBlockOpening(_ line: TextLine, bytes: [UInt8], paragraphContinu
         if paragraphContinuation { return nil }
         return completeHTMLTag(bytes, tagStart: index, lineEnd: sliceEnd) ? .blankLine : nil
     }
-    if htmlRawTags.contains(name) {
-        return .closingTag(Array("</\(name)>".utf8))
-    }
-    if htmlBlockTags.contains(name) {
-        return .blankLine
-    }
+    if htmlRawTags.contains(name) { return .closingTag(Array("</\(name)>".utf8)) }
+    if htmlBlockTags.contains(name) { return .blankLine }
     if paragraphContinuation { return nil }
     return completeHTMLTag(bytes, tagStart: index, lineEnd: sliceEnd) ? .blankLine : nil
 }
@@ -850,9 +826,7 @@ private func tagBoundaryFollows(_ bytes: [UInt8], _ index: Int, _ end: Int) -> B
 private func completeHTMLTag(_ bytes: [UInt8], tagStart: Int, lineEnd: Int) -> Bool {
     var index = tagStart + 1
     guard index < lineEnd else { return false }
-    if bytes[index] == 0x2F {
-        index += 1
-    }
+    if bytes[index] == 0x2F { index += 1 }
     guard index < lineEnd, bytes[index].isASCIILetter else { return false }
     index += 1
     while index < lineEnd {

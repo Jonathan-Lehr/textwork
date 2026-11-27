@@ -9,14 +9,10 @@ final class EditorDeletionTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         let application = NSApplication.shared
-        if application.activationPolicy() != .accessory {
-            application.setActivationPolicy(.accessory)
-        }
+        if application.activationPolicy() != .accessory { application.setActivationPolicy(.accessory) }
         // xctest does not finish launching the application. On the GitHub
         // runner, making a window key before this returns aborts the process.
-        if !application.isRunning {
-            application.finishLaunching()
-        }
+        if !application.isRunning { application.finishLaunching() }
     }
 
     func testNewDocumentStartsEmpty() {

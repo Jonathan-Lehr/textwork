@@ -93,9 +93,7 @@ enum FencedCodeTokenizer {
 
     /// HTML for a fenced code body. Unknown languages are escaped and not colored.
     static func html(for text: String, languageName: String?) -> String {
-        guard let languageName, let language = language(named: languageName) else {
-            return escapeRaw(text)
-        }
+        guard let languageName, let language = language(named: languageName) else { return escapeRaw(text) }
         let bytes = Array(text.utf8)
         var state = FencedCodeScanState()
         var html = ""
@@ -287,9 +285,7 @@ private func scanSwift(
                 state.awaitingFunctionName = false
                 state.awaitingPropertyName = false
                 state.awaitingLocalName = false
-                if state.scopes.last?.kind == .typeBody {
-                    recordFunction(word, state: &state)
-                }
+                if state.scopes.last?.kind == .typeBody { recordFunction(word, state: &state) }
             } else if state.awaitingPropertyName {
                 state.awaitingPropertyName = false
                 recordProperty(word, state: &state)
@@ -355,9 +351,7 @@ private func scanJSON(
             let start = index
             index = consumeIdentifier(bytes, from: index, limit: limit)
             let word = String(decoding: bytes[start..<index], as: UTF8.self)
-            if jsonKeywords.contains(word) {
-                appendToken(start..<index, role: .codeKeyword, into: &tokens)
-            }
+            if jsonKeywords.contains(word) { appendToken(start..<index, role: .codeKeyword, into: &tokens) }
             continue
         }
         index += DocumentBuffer.scalarWidth(bytes, index).0
@@ -389,9 +383,7 @@ private func scanShell(
             let start = index
             index = consumeIdentifier(bytes, from: index, limit: limit)
             let word = String(decoding: bytes[start..<index], as: UTF8.self)
-            if shellKeywords.contains(word) {
-                appendToken(start..<index, role: .codeKeyword, into: &tokens)
-            }
+            if shellKeywords.contains(word) { appendToken(start..<index, role: .codeKeyword, into: &tokens) }
             continue
         }
         index += DocumentBuffer.scalarWidth(bytes, index).0
@@ -450,9 +442,7 @@ private func consumeHTMLTag(
     if index < limit, bytes[index] == 0x2F { index += 1 }
     let nameStart = index
     while index < limit, isNameByte(bytes[index]) { index += 1 }
-    if index > nameStart {
-        appendToken(nameStart..<index, role: .codeTag, into: &tokens)
-    }
+    if index > nameStart { appendToken(nameStart..<index, role: .codeTag, into: &tokens) }
     while index < limit, bytes[index] != 0x3E {
         let byte = bytes[index]
         if byte == 0x22 || byte == 0x27 {
@@ -568,9 +558,7 @@ private func consumeIdentifier(_ bytes: [UInt8], from start: Int, limit: Int) ->
 private func tripleQuote(_ bytes: [UInt8], from start: Int, limit: Int) -> Int? {
     var index = start
     while index + 2 < limit {
-        if bytes[index] == 0x22, bytes[index + 1] == 0x22, bytes[index + 2] == 0x22 {
-            return index + 3
-        }
+        if bytes[index] == 0x22, bytes[index + 1] == 0x22, bytes[index + 2] == 0x22 { return index + 3 }
         index += 1
     }
     return nil
@@ -581,9 +569,7 @@ private func seekASCII(_ bytes: [UInt8], from start: Int, limit: Int, ascii: Str
     guard !needle.isEmpty else { return nil }
     var index = start
     while index + needle.count <= limit {
-        if Array(bytes[index..<(index + needle.count)]) == needle {
-            return index + needle.count
-        }
+        if Array(bytes[index..<(index + needle.count)]) == needle { return index + needle.count }
         index += 1
     }
     return nil
@@ -681,9 +667,7 @@ private func openSwiftBrace(_ state: inout FencedCodeScanState) {
 }
 
 private func closeSwiftBrace(_ state: inout FencedCodeScanState) {
-    if !state.scopes.isEmpty {
-        state.scopes.removeLast()
-    }
+    if !state.scopes.isEmpty { state.scopes.removeLast() }
     state.awaitingPropertyName = false
     state.awaitingLocalName = false
 }
@@ -719,9 +703,7 @@ private func recordLocal(_ name: String, state: inout FencedCodeScanState) {
 private func barePropertyReference(_ name: String, state: FencedCodeScanState) -> Bool {
     for scope in state.scopes.reversed() {
         if scope.localNames.contains(name) { return false }
-        if scope.kind == .typeBody {
-            return scope.propertyNames.contains(name)
-        }
+        if scope.kind == .typeBody { return scope.propertyNames.contains(name) }
     }
     return false
 }

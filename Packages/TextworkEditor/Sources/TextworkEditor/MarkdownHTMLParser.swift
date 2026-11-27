@@ -86,9 +86,7 @@ private struct BlockParser {
                 index += 1
             }
             if index >= end { break }
-            if takeReferenceDefinition() {
-                continue
-            }
+            if takeReferenceDefinition() { continue }
             if let fence = takeFence(until: end) {
                 blocks.append(fence)
             } else if let heading = takeATXHeading() {
@@ -107,9 +105,7 @@ private struct BlockParser {
             } else {
                 blocks.append(takeParagraph(until: end))
             }
-            if index == start {
-                index += 1
-            }
+            if index == start { index += 1 }
         }
         return blocks
     }
@@ -127,9 +123,7 @@ private struct BlockParser {
             index += 1
         }
         var text = content.joined(separator: "\n")
-        if !content.isEmpty {
-            text += "\n"
-        }
+        if !content.isEmpty { text += "\n" }
         return .codeBlock(language: languageName(opening.info), text: text)
     }
 
@@ -231,9 +225,7 @@ private struct BlockParser {
                         if !blankRun.isEmpty { loose = true }
                         break
                     }
-                    if next.indent <= markerIndent {
-                        break
-                    }
+                    if next.indent <= markerIndent { break }
                 }
                 let indent = leadingColumnCount(line)
                 let nestedMarker = listMarker(line)?.indent ?? -1
@@ -280,9 +272,7 @@ private struct BlockParser {
             break
         }
         var text = content.joined(separator: "\n")
-        if !content.isEmpty {
-            text += "\n"
-        }
+        if !content.isEmpty { text += "\n" }
         return .codeBlock(language: nil, text: text)
     }
 
@@ -355,9 +345,7 @@ private func splitLines(_ markdown: String) -> [String] {
         current.unicodeScalars.append(scalar)
         index = scalars.index(after: index)
     }
-    if !current.isEmpty {
-        lines.append(current)
-    }
+    if !current.isEmpty { lines.append(current) }
     return lines
 }
 
@@ -534,9 +522,7 @@ private func stripBlockQuoteMarker(_ line: String) -> String {
     var content = stripColumns(line, indent)
     guard content.first == ">" else { return content }
     content.removeFirst()
-    if content.first == " " {
-        content.removeFirst()
-    }
+    if content.first == " " { content.removeFirst() }
     return content
 }
 
@@ -727,12 +713,8 @@ private func tableCells(_ line: String) -> [String] {
         index = line.index(after: index)
     }
     cells.append(current.trimmingCharacters(in: .whitespaces))
-    if cells.first?.isEmpty == true {
-        cells.removeFirst()
-    }
-    if cells.last?.isEmpty == true {
-        cells.removeLast()
-    }
+    if cells.first?.isEmpty == true { cells.removeFirst() }
+    if cells.last?.isEmpty == true { cells.removeLast() }
     return cells
 }
 
@@ -1412,9 +1394,7 @@ private struct InlineParser {
                 matched = true
                 break
             }
-            if !matched {
-                closerIndex += 1
-            }
+            if !matched { closerIndex += 1 }
         }
         return pieces.map { piece in
             if case let .delimiter(marker, count, _, _) = piece {
@@ -1498,12 +1478,8 @@ private func flanking(marker: Character, before: Character?, after: Character?) 
 
 private func flankingClass(_ character: Character?) -> FlankingClass {
     guard let character else { return .whitespace }
-    if character == " " || character == "\t" || character == "\n" || character == "\r" {
-        return .whitespace
-    }
-    if isASCIIPunctuation(character) {
-        return .punctuation
-    }
+    if character == " " || character == "\t" || character == "\n" || character == "\r" { return .whitespace }
+    if isASCIIPunctuation(character) { return .punctuation }
     return .word
 }
 

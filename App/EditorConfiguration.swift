@@ -35,12 +35,8 @@ struct EditorTypography: Equatable, Sendable {
     /// Which face to load. A missing Menlo request falls back to the system
     /// monospaced font. Any other missing name falls back to the system font.
     static func fontSource(fontName: String?, nameIsAvailable: Bool) -> EditorFontSource {
-        if let fontName, nameIsAvailable {
-            return .named(fontName)
-        }
-        if fontName == menloFontName {
-            return .systemMonospaced
-        }
+        if let fontName, nameIsAvailable { return .named(fontName) }
+        if fontName == menloFontName { return .systemMonospaced }
         return .system
     }
 }
@@ -84,17 +80,13 @@ extension NSFont {
 
     func addingBold() -> NSFont {
         let italic = NSFontManager.shared.traits(of: self).contains(.italicFontMask)
-        if let menlo = menloFace(bold: true, italic: italic) {
-            return menlo
-        }
+        if let menlo = menloFace(bold: true, italic: italic) { return menlo }
         return NSFontManager.shared.convert(self, toHaveTrait: .boldFontMask)
     }
 
     func addingItalic() -> NSFont {
         let bold = NSFontManager.shared.traits(of: self).contains(.boldFontMask)
-        if let menlo = menloFace(bold: bold, italic: true) {
-            return menlo
-        }
+        if let menlo = menloFace(bold: bold, italic: true) { return menlo }
         return NSFontManager.shared.convert(self, toHaveTrait: .italicFontMask)
     }
 
@@ -154,17 +146,13 @@ extension EditorConfiguration {
     }
 
     func monospacedFont() -> NSFont {
-        if typography.fontName == EditorTypography.menloFontName {
-            return font(ofSize: resolvedFontSize)
-        }
+        if typography.fontName == EditorTypography.menloFontName { return font(ofSize: resolvedFontSize) }
         return NSFont.monospacedSystemFont(ofSize: resolvedFontSize, weight: .regular)
     }
 
     func boldFont(ofSize size: CGFloat) -> NSFont {
         if typography.fontName == EditorTypography.menloFontName {
-            if let face = NSFont.menlo(ofSize: size, bold: true, italic: false) {
-                return face
-            }
+            if let face = NSFont.menlo(ofSize: size, bold: true, italic: false) { return face }
             return NSFont.monospacedSystemFont(ofSize: size, weight: .bold)
         }
         return NSFontManager.shared.convert(font(ofSize: size), toHaveTrait: .boldFontMask)
@@ -193,17 +181,13 @@ extension UIFont {
 
     func addingBold() -> UIFont {
         let italic = fontDescriptor.symbolicTraits.contains(.traitItalic)
-        if let menlo = menloFace(bold: true, italic: italic) {
-            return menlo
-        }
+        if let menlo = menloFace(bold: true, italic: italic) { return menlo }
         return addingSymbolicTrait(.traitBold)
     }
 
     func addingItalic() -> UIFont {
         let bold = fontDescriptor.symbolicTraits.contains(.traitBold)
-        if let menlo = menloFace(bold: bold, italic: true) {
-            return menlo
-        }
+        if let menlo = menloFace(bold: bold, italic: true) { return menlo }
         return addingSymbolicTrait(.traitItalic)
     }
 
@@ -257,17 +241,13 @@ extension EditorConfiguration {
     }
 
     func monospacedFont() -> UIFont {
-        if typography.fontName == EditorTypography.menloFontName {
-            return font(ofSize: resolvedFontSize)
-        }
+        if typography.fontName == EditorTypography.menloFontName { return font(ofSize: resolvedFontSize) }
         return UIFont.monospacedSystemFont(ofSize: resolvedFontSize, weight: .regular)
     }
 
     func boldFont(ofSize size: CGFloat) -> UIFont {
         if typography.fontName == EditorTypography.menloFontName {
-            if let face = UIFont.menlo(ofSize: size, bold: true, italic: false) {
-                return face
-            }
+            if let face = UIFont.menlo(ofSize: size, bold: true, italic: false) { return face }
             return UIFont.monospacedSystemFont(ofSize: size, weight: .bold)
         }
         return font(ofSize: size).addingBold()

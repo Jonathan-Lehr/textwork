@@ -186,16 +186,10 @@ public struct MarkdownHTMLRenderer: Sendable {
     /// Resolves a preview image or link path and refuses anything outside `directory`.
     public static func fileURL(forPreviewPath path: String, in directory: URL) -> URL? {
         var relative = path
-        if relative.hasPrefix("/") {
-            relative.removeFirst()
-        }
-        if relative.isEmpty || relative.contains("\0") {
-            return nil
-        }
+        if relative.hasPrefix("/") { relative.removeFirst() }
+        if relative.isEmpty || relative.contains("\0") { return nil }
         let parts = relative.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
-        if parts.isEmpty || parts.contains(where: { $0 == "." || $0 == ".." }) {
-            return nil
-        }
+        if parts.isEmpty || parts.contains(where: { $0 == "." || $0 == ".." }) { return nil }
         let root = directory.standardizedFileURL
         var candidate = root
         for part in parts {
@@ -229,9 +223,7 @@ public struct MarkdownHTMLRenderer: Sendable {
         case .list(let orderedStart, let tight, let items):
             let tag = orderedStart == nil ? "ul" : "ol"
             var opening = "<\(tag)"
-            if let orderedStart, orderedStart != 1 {
-                opening += " start=\"\(orderedStart)\""
-            }
+            if let orderedStart, orderedStart != 1 { opening += " start=\"\(orderedStart)\"" }
             opening += ">"
             let body = items.map { emitItem($0, unwrapParagraphs: tight) }.joined(separator: "\n")
             return "\(opening)\n\(body)\n</\(tag)>"
@@ -252,9 +244,7 @@ public struct MarkdownHTMLRenderer: Sendable {
                         html += "<td\(alignmentAttribute(alignment))>\(emitInlines(source))</td>"
                     }
                     html += "</tr>"
-                    if rowIndex != rows.count - 1 {
-                        html += "\n"
-                    }
+                    if rowIndex != rows.count - 1 { html += "\n" }
                 }
                 html += "\n</tbody>"
             }
@@ -304,9 +294,7 @@ public struct MarkdownHTMLRenderer: Sendable {
             }
             return "<a href=\"\(href)\">\(inner)</a>"
         case .image(let destination, let alternativeText):
-            guard let source = imageSource(destination) else {
-                return escapeText(alternativeText)
-            }
+            guard let source = imageSource(destination) else { return escapeText(alternativeText) }
             return "<img src=\"\(source)\" alt=\"\(escapeAttribute(decodeEntities(alternativeText)))\">"
         case .unresolvedReference(let match):
             return escapeText(match.opening) + emitInlines(match.children) + escapeText(match.closing)
@@ -409,9 +397,7 @@ private func entity(in source: String, at start: String.Index) -> (String, Strin
         cursor = source.index(after: cursor)
         guard cursor < source.endIndex else { return nil }
         let hexadecimal = source[cursor] == "x" || source[cursor] == "X"
-        if hexadecimal {
-            cursor = source.index(after: cursor)
-        }
+        if hexadecimal { cursor = source.index(after: cursor) }
         let digitsStart = cursor
         var digits = 0
         while cursor < source.endIndex, digits < 8 {
@@ -428,9 +414,7 @@ private func entity(in source: String, at start: String.Index) -> (String, Strin
         if value == 0 || !(0...0x10FFFF).contains(value) || (0xD800...0xDFFF).contains(value) {
             return ("\u{FFFD}", next)
         }
-        guard let scalar = Unicode.Scalar(value) else {
-            return ("\u{FFFD}", next)
-        }
+        guard let scalar = Unicode.Scalar(value) else { return ("\u{FFFD}", next) }
         return (String(scalar), next)
     }
     let nameStart = cursor

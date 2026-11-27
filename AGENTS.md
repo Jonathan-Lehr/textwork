@@ -40,6 +40,16 @@ case .strong: font = font.addingBold()
 }
 ```
 
+- Prefer a one-line `if` or `guard` when the condition and a single short body fit comfortably on one line. The body is a `return`, `break`, `continue`, assignment, or call. A multi-statement body stays expanded. An `if`/`else` chain that reads more clearly on several lines stays expanded. A line that would run long stays expanded:
+
+```swift
+static func fontSource(fontName: String?, nameIsAvailable: Bool) -> EditorFontSource {
+    if let fontName, nameIsAvailable { return .named(fontName) }
+    if fontName == menloFontName { return .systemMonospaced }
+    return .system
+}
+```
+
 ## Layout
 
 - `App/` is the SwiftUI document app.

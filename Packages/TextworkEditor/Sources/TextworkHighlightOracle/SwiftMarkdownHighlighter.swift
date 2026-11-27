@@ -140,15 +140,9 @@ private struct Walker: MarkupWalker {
         }
         let matchStart = outer.lowerBound + outerText.utf16.distance(from: outerText.startIndex, to: match.lowerBound)
         let matchEnd = matchStart + literal.utf16.count
-        if matchStart > outer.lowerBound {
-            append(outer.lowerBound..<matchStart, role: role, isSyntax: true)
-        }
-        if matchEnd > matchStart {
-            append(matchStart..<matchEnd, role: role, isSyntax: false)
-        }
-        if matchEnd < outer.upperBound {
-            append(matchEnd..<outer.upperBound, role: role, isSyntax: true)
-        }
+        if matchStart > outer.lowerBound { append(outer.lowerBound..<matchStart, role: role, isSyntax: true) }
+        if matchEnd > matchStart { append(matchStart..<matchEnd, role: role, isSyntax: false) }
+        if matchEnd < outer.upperBound { append(matchEnd..<outer.upperBound, role: role, isSyntax: true) }
     }
 
     private mutating func append(_ range: Range<Int>, role: HighlightRole, isSyntax: Bool) {
@@ -212,9 +206,7 @@ private struct LineIndex {
 
     func utf16Offset(line: Int, column: Int) -> Int {
         guard line >= 1 else { return 0 }
-        if line > lineStarts.count {
-            return utf16Starts.last ?? 0
-        }
+        if line > lineStarts.count { return utf16Starts.last ?? 0 }
         let lineUTF16 = utf16Starts[line - 1]
         let lineStart = lineStarts[line - 1]
         let byteBudget = max(0, column - 1)

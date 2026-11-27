@@ -562,9 +562,7 @@ private struct ExpectedColors {
 private func relativeLuminance(_ components: HighlightColorComponents) -> Double {
     func channel(_ byte: UInt8) -> Double {
         let value = Double(byte) / 255
-        if value <= 0.04045 {
-            return value / 12.92
-        }
+        if value <= 0.04045 { return value / 12.92 }
         return pow((value + 0.055) / 1.055, 2.4)
     }
     return 0.2126 * channel(components.red) + 0.7152 * channel(components.green) + 0.0722 * channel(components.blue)

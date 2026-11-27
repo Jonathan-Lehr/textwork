@@ -111,9 +111,7 @@ public struct MarkdownHighlighter: Sendable {
                 if structure.start < structure.end {
                     let start = lines[structure.start].utf16Start
                     let end = lines[structure.end - 1].utf16End
-                    if end > start {
-                        invalidated.append(start..<end)
-                    }
+                    if end > start { invalidated.append(start..<end) }
                 }
             }
         }
@@ -130,9 +128,7 @@ public struct MarkdownHighlighter: Sendable {
         if previous == nil {
             invalidatedRanges = utf16Count > 0 ? [0..<utf16Count] : []
         } else {
-            if let editedUTF16, !editedUTF16.isEmpty {
-                invalidated.append(editedUTF16)
-            }
+            if let editedUTF16, !editedUTF16.isEmpty { invalidated.append(editedUTF16) }
             invalidatedRanges = mergeRanges(invalidated)
         }
 
@@ -165,9 +161,7 @@ public struct MarkdownHighlighter: Sendable {
         editByteEnd: Int,
         utf16Delta: Int
     ) -> [Int: ReusedStyle] {
-        guard let previous, previous.bytes.count + (editByteEnd - editByteStart) >= 0 else {
-            return [:]
-        }
+        guard let previous, previous.bytes.count + (editByteEnd - editByteStart) >= 0 else { return [:] }
         let byteDelta = (editByteEnd - editByteStart) - removedByteCount(previous: previous, editByteStart: editByteStart, editByteEnd: editByteEnd, newCount: bytes.count)
         var reused: [Int: ReusedStyle] = [:]
 

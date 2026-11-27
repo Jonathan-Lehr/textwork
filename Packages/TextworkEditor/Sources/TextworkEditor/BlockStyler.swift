@@ -333,9 +333,7 @@ private func styleQuote(
         while index < limit && bytes[index] == 0x3E {
             let markerStart = index
             index += 1
-            if index < limit && bytes[index] == 0x20 {
-                index += 1
-            }
+            if index < limit && bytes[index] == 0x20 { index += 1 }
             append(markerStart..<index, role: .blockQuote, isSyntax: true, bytes: bytes, lines: lines, into: &spans)
         }
         if index < limit {
@@ -382,9 +380,7 @@ private func styleList(
         while index < limit && bytes[index].isASCIIDigit {
             index += 1
         }
-        if index < limit && (bytes[index] == 0x2E || bytes[index] == 0x29) {
-            index += 1
-        }
+        if index < limit && (bytes[index] == 0x2E || bytes[index] == 0x29) { index += 1 }
     }
     while index < limit && (bytes[index] == 0x20 || bytes[index] == 0x09) {
         index += 1
@@ -394,9 +390,7 @@ private func styleList(
         let checkbox = bytes[index + 1]
         if checkbox == 0x20 || checkbox == 0x78 || checkbox == 0x58 {
             index += 3
-            if index < limit && (bytes[index] == 0x20 || bytes[index] == 0x09) {
-                index += 1
-            }
+            if index < limit && (bytes[index] == 0x20 || bytes[index] == 0x09) { index += 1 }
         }
     }
     append(markerStart..<index, role: .listMarker, isSyntax: true, bytes: bytes, lines: [], lineHint: line, into: &spans)
@@ -461,9 +455,7 @@ private func tableCells(bytes: [UInt8], line: TextLine) -> [TableCell] {
         }
         if bytes[index] == 0x7C {
             let trimmed = trimSpaces(bytes, textStart..<index)
-            if !trimmed.isEmpty {
-                cells.append(.text(trimmed))
-            }
+            if !trimmed.isEmpty { cells.append(.text(trimmed)) }
             cells.append(.pipe(index..<(index + 1)))
             index += 1
             textStart = index
@@ -472,9 +464,7 @@ private func tableCells(bytes: [UInt8], line: TextLine) -> [TableCell] {
         index += DocumentBuffer.scalarWidth(bytes, index).0
     }
     let trimmed = trimSpaces(bytes, textStart..<limit)
-    if !trimmed.isEmpty {
-        cells.append(.text(trimmed))
-    }
+    if !trimmed.isEmpty { cells.append(.text(trimmed)) }
     return cells
 }
 
@@ -506,9 +496,7 @@ private func scanCodeSpans(bytes: [UInt8], range: Range<Int>, mask: inout ByteMa
         }
         raw.append(RawSpan(byteRange: index..<(index + openerLength), role: .codeSpan, isSyntax: true))
         let content = (index + openerLength)..<closer
-        if !content.isEmpty {
-            raw.append(RawSpan(byteRange: content, role: .codeSpan, isSyntax: false))
-        }
+        if !content.isEmpty { raw.append(RawSpan(byteRange: content, role: .codeSpan, isSyntax: false)) }
         raw.append(RawSpan(byteRange: closer..<(closer + openerLength), role: .codeSpan, isSyntax: true))
         mask.cover(index..<(closer + openerLength))
         index = closer + openerLength
@@ -615,18 +603,10 @@ private func referenceLinkEnd(
             return definedLabels.contains(linkText) ? labelEnd + 1 : nil
         }
         let reference = normalizedLabel(bytes: bytes, range: secondStart..<secondEnd)
-        if !reference.isEmpty {
-            candidateLabels.append(reference)
-        }
-        if !linkText.isEmpty {
-            candidateLabels.append(linkText)
-        }
-        if !reference.isEmpty, definedLabels.contains(reference) {
-            return secondEnd + 1
-        }
-        if !linkText.isEmpty, definedLabels.contains(linkText) {
-            return labelEnd + 1
-        }
+        if !reference.isEmpty { candidateLabels.append(reference) }
+        if !linkText.isEmpty { candidateLabels.append(linkText) }
+        if !reference.isEmpty, definedLabels.contains(reference) { return secondEnd + 1 }
+        if !linkText.isEmpty, definedLabels.contains(linkText) { return labelEnd + 1 }
         return nil
     }
     guard !linkText.isEmpty else { return nil }
@@ -645,9 +625,7 @@ private func appendLinkLabel(
     mask: ByteMask,
     into raw: inout [RawSpan]
 ) {
-    if isImage {
-        raw.append(RawSpan(byteRange: markerStart..<(markerStart + 1), role: role, isSyntax: true))
-    }
+    if isImage { raw.append(RawSpan(byteRange: markerStart..<(markerStart + 1), role: role, isSyntax: true)) }
     raw.append(RawSpan(byteRange: bracket..<(bracket + 1), role: role, isSyntax: true))
     let label = (bracket + 1)..<labelEnd
     if !label.isEmpty {
@@ -795,13 +773,9 @@ private func htmlTag(bytes: [UInt8], open: Int, limit: Int) -> HTMLMarkup? {
             var spans: [RawSpan] = []
             let openerEnd = closingTag ? open + 2 : open + 1
             spans.append(RawSpan(byteRange: open..<openerEnd, role: .html, isSyntax: true))
-            if !name.isEmpty {
-                spans.append(RawSpan(byteRange: name, role: .html, isSyntax: false))
-            }
+            if !name.isEmpty { spans.append(RawSpan(byteRange: name, role: .html, isSyntax: false)) }
             var closerStart = index
-            if closerStart > nameEnd, bytes[closerStart - 1] == 0x2F {
-                closerStart -= 1
-            }
+            if closerStart > nameEnd, bytes[closerStart - 1] == 0x2F { closerStart -= 1 }
             if nameEnd < closerStart {
                 spans.append(RawSpan(byteRange: nameEnd..<closerStart, role: .html, isSyntax: false))
             }
@@ -815,9 +789,7 @@ private func htmlTag(bytes: [UInt8], open: Int, limit: Int) -> HTMLMarkup? {
 
 private func markup(open: Int, delimiter: Int, body: Range<Int>, closer: Int) -> HTMLMarkup {
     var spans = [RawSpan(byteRange: open..<(open + delimiter), role: .html, isSyntax: true)]
-    if !body.isEmpty {
-        spans.append(RawSpan(byteRange: body, role: .html, isSyntax: false))
-    }
+    if !body.isEmpty { spans.append(RawSpan(byteRange: body, role: .html, isSyntax: false)) }
     let closerStart = body.upperBound
     spans.append(RawSpan(byteRange: closerStart..<(closerStart + closer), role: .html, isSyntax: true))
     return HTMLMarkup(spans: spans, end: closerStart + closer)
@@ -829,9 +801,7 @@ private func seek(_ bytes: [UInt8], from start: Int, limit: Int, ascii: String, 
     var index = start
     while index + needle.count <= limit {
         if !allowNewline, bytes[index] == 0x0A || bytes[index] == 0x0D { return nil }
-        if Array(bytes[index..<(index + needle.count)]) == needle {
-            return index
-        }
+        if Array(bytes[index..<(index + needle.count)]) == needle { return index }
         index += 1
     }
     return nil
@@ -931,9 +901,7 @@ private func emphasisSpans(bytes: [UInt8], range: Range<Int>, mask: ByteMask) ->
                 let closerByte = closer.startByte
                 spans.append(RawSpan(byteRange: openerByte..<(openerByte + used), role: role, isSyntax: true))
                 let content = (openerByte + used)..<closerByte
-                if !content.isEmpty {
-                    spans.append(RawSpan(byteRange: content, role: role, isSyntax: false))
-                }
+                if !content.isEmpty { spans.append(RawSpan(byteRange: content, role: role, isSyntax: false)) }
                 spans.append(RawSpan(byteRange: closerByte..<(closerByte + used), role: role, isSyntax: true))
                 delimiters[openerIndex].remaining -= used
                 delimiters[closerIndex].startByte += used
@@ -943,9 +911,7 @@ private func emphasisSpans(bytes: [UInt8], range: Range<Int>, mask: ByteMask) ->
             }
             openerIndex -= 1
         }
-        if !matched || delimiters[closerIndex].remaining == 0 {
-            closerIndex += 1
-        }
+        if !matched || delimiters[closerIndex].remaining == 0 { closerIndex += 1 }
     }
     return spans
 }
@@ -1001,12 +967,8 @@ private func closingBracket(bytes: [UInt8], from start: Int, limit: Int, mask: B
             index = end
             continue
         }
-        if bytes[index] == 0x5D && !isEscaped(bytes, index) {
-            return index
-        }
-        if bytes[index] == 0x0A || bytes[index] == 0x5B {
-            return nil
-        }
+        if bytes[index] == 0x5D && !isEscaped(bytes, index) { return index }
+        if bytes[index] == 0x0A || bytes[index] == 0x5B { return nil }
         index += DocumentBuffer.scalarWidth(bytes, index).0
     }
     return nil
@@ -1040,9 +1002,7 @@ private func autolinkEnd(bytes: [UInt8], open: Int, limit: Int) -> Int? {
         index += 1
     }
     guard index < limit, bytes[index] == 0x3E, index > start else { return nil }
-    if hasWebScheme(bytes, start, end: index) || looksLikeEmail(bytes, start, end: index) {
-        return index
-    }
+    if hasWebScheme(bytes, start, end: index) || looksLikeEmail(bytes, start, end: index) { return index }
     return nil
 }
 
@@ -1054,9 +1014,7 @@ private func startsWebAddress(_ bytes: [UInt8], _ index: Int, limit: Int) -> Boo
     for scheme in schemes where index + scheme.count <= limit {
         if Array(bytes[index..<(index + scheme.count)]) == scheme {
             let previous = index > 0 ? bytes[index - 1] : 0x20
-            if flankingClass(of: previous) != .word {
-                return true
-            }
+            if flankingClass(of: previous) != .word { return true }
         }
     }
     return false
