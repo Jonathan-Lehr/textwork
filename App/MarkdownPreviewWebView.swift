@@ -58,12 +58,12 @@ private struct MarkdownPreviewRepresentable: UIViewRepresentable {
 final class MarkdownPreviewCoordinator: NSObject, WKNavigationDelegate {
     let handler = PreviewResourceHandler()
     private let renderer = MarkdownHTMLRenderer(imageAddressing: .preview)
-    private var didLoad = false
-    private var shellReady = false
+    private var hasRequestedPreviewDocument = false
+    private var previewPageDidFinishLoading = false
     private var loadedBody: String?
     private var pendingBody: String?
     private var loadedDirectory: String?
-    private var generation = 0
+    private var latestBodyUpdateSequence = 0
 
     func makeWebView() -> WKWebView {
         let configuration = WKWebViewConfiguration()
@@ -101,9 +101,9 @@ final class MarkdownPreviewCoordinator: NSObject, WKNavigationDelegate {
     func update(bodyHTML: String, resourceDirectory: URL?, webView: WKWebView) {
         handler.setResourceDirectory(resourceDirectory)
         let directoryKey = resourceDirectory?.standardizedFileURL.path
-        if !didLoad || directoryKey != loadedDirectory {
+        if !hasRequestedPreviewDocument || directoryKey != loadedDirectory {
             loadedDirectory = directoryKey
-            didLoad = true
+            hasRequestedPreviewDocument = true
             load(bodyHTML, in: webView)
             return
         }
@@ -113,7 +113,7 @@ final class MarkdownPreviewCoordinator: NSObject, WKNavigationDelegate {
     }
 
     private func load(_ bodyHTML: String, in webView: WKWebView) {
-        shellReady = false
+        previewPageDidFinishLoading = false
         pendingBody = bodyHTML
         loadedBody = bodyHTML
         handler.setDocumentHTML(renderer.document(wrapping: bodyHTML, title: "Preview"))
@@ -121,12 +121,12 @@ final class MarkdownPreviewCoordinator: NSObject, WKNavigationDelegate {
     }
 
     private func applyIfReady(in webView: WKWebView) {
-        guard shellReady, let body = pendingBody, body != loadedBody else { return }
-        generation += 1
-        let token = generation
+        guard previewPageDidFinishLoading, let body = pendingBody, body != loadedBody else { return }
+        latestBodyUpdateSequence += 1
+        let bodyUpdateSequence = latestBodyUpdateSequence
         let script = """
-        if (window.textworkPreviewGeneration > generation) { return false; }
-        window.textworkPreviewGeneration = generation;
+        if (window.textworkPreviewBodyUpdateSequence > bodyUpdateSequence) { return false; }
+        window.textworkPreviewBodyUpdateSequence = bodyUpdateSequence;
         const content = document.getElementById('content');
         if (!content) { return false; }
         const scrolling = document.scrollingElement || document.documentElement;
@@ -139,21 +139,21 @@ final class MarkdownPreviewCoordinator: NSObject, WKNavigationDelegate {
             do {
                 let result = try await webView.callAsyncJavaScript(
                     script,
-                    arguments: ["body": body, "generation": token],
+                    arguments: ["body": body, "bodyUpdateSequence": bodyUpdateSequence],
                     in: nil,
                     contentWorld: .page
                 )
-                guard token == self.generation, (result as? Bool) != false else { return }
+                guard bodyUpdateSequence == self.latestBodyUpdateSequence, (result as? Bool) != false else { return }
                 self.loadedBody = body
             } catch {
-                guard token == self.generation else { return }
+                guard bodyUpdateSequence == self.latestBodyUpdateSequence else { return }
                 self.load(body, in: webView)
             }
         }
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        shellReady = true
+        previewPageDidFinishLoading = true
         applyIfReady(in: webView)
     }
 

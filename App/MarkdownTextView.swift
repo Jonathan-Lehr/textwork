@@ -9,14 +9,14 @@ private func clampedRange(_ range: Range<Int>, length: Int) -> NSRange? {
 }
 
 private func clippedRanges(of span: HighlightSpan, limits: [Range<Int>], length: Int) -> [NSRange] {
-    var pieces: [NSRange] = []
+    var ranges: [NSRange] = []
     for limit in limits {
         let lower = max(0, max(span.startUTF16, limit.lowerBound))
         let upper = min(length, min(span.endUTF16, limit.upperBound))
         guard upper > lower else { continue }
-        pieces.append(NSRange(location: lower, length: upper - lower))
+        ranges.append(NSRange(location: lower, length: upper - lower))
     }
-    return pieces
+    return ranges
 }
 
 /// `true` when `selection` lies inside a storage of `storageLength`.
@@ -100,7 +100,7 @@ struct MarkdownTextEditor: NSViewRepresentable {
         var configuration: EditorConfiguration
         var snapshot: HighlightSnapshot
         var isApplyingHighlight = false
-        private var isTypingAttributeRestoreScheduled = false
+        private var isBaseTypingAttributesScheduled = false
         weak var textView: NSTextView?
 
         init(text: Binding<String>, configuration: EditorConfiguration) {
@@ -111,8 +111,8 @@ struct MarkdownTextEditor: NSViewRepresentable {
 
         func repaint(in textView: NSTextView) {
             guard let storage = textView.textStorage else { return }
-            let full = 0..<storage.length
-            paint(snapshot.spans, ranges: storage.length > 0 ? [full] : [], in: storage, textView: textView)
+            let entireStorage = 0..<storage.length
+            paint(snapshot.spans, ranges: storage.length > 0 ? [entireStorage] : [], in: storage, textView: textView)
             applyTypingAttributes()
         }
 
@@ -155,7 +155,7 @@ struct MarkdownTextEditor: NSViewRepresentable {
             isApplyingHighlight = true
             paint(snapshot.spans, ranges: snapshot.invalidatedUTF16Ranges, in: storage, textView: textView)
             isApplyingHighlight = false
-            scheduleTypingAttributeRestore()
+            scheduleBaseTypingAttributes()
             text = storage.string
         }
 
@@ -168,37 +168,37 @@ struct MarkdownTextEditor: NSViewRepresentable {
             let undoManager = textView?.undoManager
             undoManager?.disableUndoRegistration()
             defer { undoManager?.enableUndoRegistration() }
-            let limits = rangesInsideStorage(ranges, length: storage.length)
-            guard !limits.isEmpty else { return }
-            let affected = spans.filter { span in
-                limits.contains { limit in
-                    limit.lowerBound < span.endUTF16 && span.startUTF16 < limit.upperBound
+            let rangesToPaint = rangesInsideStorage(ranges, length: storage.length)
+            guard !rangesToPaint.isEmpty else { return }
+            let affectedSpans = spans.filter { span in
+                rangesToPaint.contains { range in
+                    range.lowerBound < span.endUTF16 && span.startUTF16 < range.upperBound
                 }
             }
             storage.beginEditing()
-            for range in limits {
+            for range in rangesToPaint {
                 guard let nsRange = clampedRange(range, length: storage.length) else { continue }
                 storage.setAttributes(configuration.baseAttributes(), range: nsRange)
             }
-            for span in affected where !span.isSyntax {
-                HighlightColors.apply(span, configuration: configuration, to: storage, limits: limits)
+            for span in affectedSpans where !span.isSyntax {
+                HighlightColors.apply(span, configuration: configuration, to: storage, limits: rangesToPaint)
             }
-            for span in affected where span.isSyntax {
-                HighlightColors.apply(span, configuration: configuration, to: storage, limits: limits)
+            for span in affectedSpans where span.isSyntax {
+                HighlightColors.apply(span, configuration: configuration, to: storage, limits: rangesToPaint)
             }
             storage.endEditing()
         }
 
-        private func scheduleTypingAttributeRestore() {
-            guard !isTypingAttributeRestoreScheduled else { return }
-            isTypingAttributeRestoreScheduled = true
+        private func scheduleBaseTypingAttributes() {
+            guard !isBaseTypingAttributesScheduled else { return }
+            isBaseTypingAttributesScheduled = true
             // A main-actor Task can run inside AppKit's nested run loop, while
             // the selection still covers the deleted text. The main queue runs
             // this only after that call stack returns.
             DispatchQueue.main.async { [weak self] in
                 MainActor.assumeIsolated {
                     guard let self else { return }
-                    self.isTypingAttributeRestoreScheduled = false
+                    self.isBaseTypingAttributesScheduled = false
                     self.applyTypingAttributes()
                 }
             }
@@ -310,7 +310,7 @@ struct MarkdownTextEditor: UIViewRepresentable {
         var configuration: EditorConfiguration
         var snapshot: HighlightSnapshot
         var isApplyingHighlight = false
-        private var isTypingAttributeRestoreScheduled = false
+        private var isBaseTypingAttributesScheduled = false
         weak var textView: UITextView?
 
         init(text: Binding<String>, configuration: EditorConfiguration) {
@@ -321,8 +321,8 @@ struct MarkdownTextEditor: UIViewRepresentable {
 
         func repaint(in textView: UITextView) {
             let storage = textView.textStorage
-            let full = 0..<storage.length
-            paint(snapshot.spans, ranges: storage.length > 0 ? [full] : [], in: storage, textView: textView)
+            let entireStorage = 0..<storage.length
+            paint(snapshot.spans, ranges: storage.length > 0 ? [entireStorage] : [], in: storage, textView: textView)
             applyTypingAttributes()
         }
 
@@ -366,7 +366,7 @@ struct MarkdownTextEditor: UIViewRepresentable {
             isApplyingHighlight = true
             paint(snapshot.spans, ranges: snapshot.invalidatedUTF16Ranges, in: storage, textView: textView)
             isApplyingHighlight = false
-            scheduleTypingAttributeRestore()
+            scheduleBaseTypingAttributes()
             text = storage.string
         }
 
@@ -379,37 +379,37 @@ struct MarkdownTextEditor: UIViewRepresentable {
             let undoManager = textView?.undoManager
             undoManager?.disableUndoRegistration()
             defer { undoManager?.enableUndoRegistration() }
-            let limits = rangesInsideStorage(ranges, length: storage.length)
-            guard !limits.isEmpty else { return }
-            let affected = spans.filter { span in
-                limits.contains { limit in
-                    limit.lowerBound < span.endUTF16 && span.startUTF16 < limit.upperBound
+            let rangesToPaint = rangesInsideStorage(ranges, length: storage.length)
+            guard !rangesToPaint.isEmpty else { return }
+            let affectedSpans = spans.filter { span in
+                rangesToPaint.contains { range in
+                    range.lowerBound < span.endUTF16 && span.startUTF16 < range.upperBound
                 }
             }
             storage.beginEditing()
-            for range in limits {
+            for range in rangesToPaint {
                 guard let nsRange = clampedRange(range, length: storage.length) else { continue }
                 storage.setAttributes(configuration.baseAttributes(), range: nsRange)
             }
-            for span in affected where !span.isSyntax {
-                HighlightColors.apply(span, configuration: configuration, to: storage, limits: limits)
+            for span in affectedSpans where !span.isSyntax {
+                HighlightColors.apply(span, configuration: configuration, to: storage, limits: rangesToPaint)
             }
-            for span in affected where span.isSyntax {
-                HighlightColors.apply(span, configuration: configuration, to: storage, limits: limits)
+            for span in affectedSpans where span.isSyntax {
+                HighlightColors.apply(span, configuration: configuration, to: storage, limits: rangesToPaint)
             }
             storage.endEditing()
         }
 
-        private func scheduleTypingAttributeRestore() {
-            guard !isTypingAttributeRestoreScheduled else { return }
-            isTypingAttributeRestoreScheduled = true
-            // A main-actor Task can run inside AppKit's nested run loop, while
-            // the selection still covers the deleted text. The main queue runs
+        private func scheduleBaseTypingAttributes() {
+            guard !isBaseTypingAttributesScheduled else { return }
+            isBaseTypingAttributesScheduled = true
+            // UIKit can still report a selection that covers the deleted
+            // characters until this editing call returns. The main queue runs
             // this only after that call stack returns.
             DispatchQueue.main.async { [weak self] in
                 MainActor.assumeIsolated {
                     guard let self else { return }
-                    self.isTypingAttributeRestoreScheduled = false
+                    self.isBaseTypingAttributesScheduled = false
                     self.applyTypingAttributes()
                 }
             }
