@@ -25,15 +25,6 @@
 			);
 			target = BB0000000000000000000007 /* TextworkTests */;
 		};
-		CC0000000000000000000001 /* Exceptions for "App" folder in "Textwork" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			platformFiltersByRelativePath = {
-				Assets.xcassets = (
-					macos,
-				);
-			};
-			target = AA00000000000000000000F6 /* Textwork */;
-		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -41,7 +32,6 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				BB0000000000000000000004 /* Exceptions for "App" folder in "TextworkTests" target */,
-				CC0000000000000000000001 /* Exceptions for "App" folder in "Textwork" target */,
 			);
 			path = App;
 			sourceTree = "<group>";
