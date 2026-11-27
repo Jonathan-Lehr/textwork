@@ -1081,7 +1081,7 @@ private func headingPrefix(bytes: [UInt8], range: Range<Int>) -> (role: Highligh
         hashes += 1
         index += 1
     }
-    guard (1...6).contains(hashes) else { return nil }
+    guard (1...MarkdownScanLimit.maximumHeadingLevel).contains(hashes) else { return nil }
     guard index == range.upperBound || bytes[index].isHorizontalSpace else { return nil }
     let markerEnd = index < range.upperBound ? index + 1 : index
     return (HighlightRole.heading(level: hashes), hashStart..<min(markerEnd, range.upperBound), min(markerEnd, range.upperBound)..<range.upperBound)

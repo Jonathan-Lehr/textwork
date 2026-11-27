@@ -250,7 +250,7 @@ extension EditorConfiguration {
             if let face = UIFont.menlo(ofSize: size, bold: true, italic: false) { return face }
             return UIFont.monospacedSystemFont(ofSize: size, weight: .bold)
         }
-        return font(ofSize: size).addingBold()
+        return font(ofSize: size).addingSymbolicTrait(.traitBold)
     }
 
     func font(ofSize size: CGFloat) -> UIFont {

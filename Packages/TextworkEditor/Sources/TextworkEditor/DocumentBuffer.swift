@@ -363,7 +363,9 @@ enum DocumentBuffer {
             return (min(3, bytes.count - index), 1)
         }
         if byte & UTF8LeadingByte.fourByteMask == UTF8LeadingByte.fourBytePrefix {
-            return (min(4, bytes.count - index), 2)
+            let remaining = min(4, bytes.count - index)
+            let utf16Width = remaining == 4 ? 2 : 1
+            return (remaining, utf16Width)
         }
         return (1, 1)
     }
@@ -391,7 +393,9 @@ enum ReferenceDefinitionParser {
         guard let title = scanTitle(bytes: bytes, from: destination.indexAfter, end: end) else { return nil }
         let labelText = String(decoding: bytes[label.range], as: UTF8.self)
         let normalized = normalizeReferenceLabel(labelText)
-        guard !normalized.isEmpty, labelText.count <= MarkdownScanLimit.maximumReferenceLabelLength else { return nil }
+        guard !normalized.isEmpty,
+            labelText.unicodeScalars.count <= MarkdownScanLimit.maximumReferenceLabelLength
+        else { return nil }
         return ReferenceDefinitionParse(
             normalizedLabel: normalized,
             openingBracket: label.openingBracket,
@@ -446,9 +450,7 @@ enum ReferenceDefinitionParser {
         }
         guard cursor < end, bytes[cursor] == ASCIIByte.rightBracket else { return nil }
         let labelEnd = cursor
-        guard labelEnd > labelStart, labelEnd - labelStart <= MarkdownScanLimit.maximumReferenceLabelLength else {
-            return nil
-        }
+        guard labelEnd > labelStart else { return nil }
         let colon = cursor + 1
         guard colon < end, bytes[colon] == ASCIIByte.colon else { return nil }
         return LabelScan(
@@ -500,7 +502,7 @@ enum ReferenceDefinitionParser {
             if bytes[cursor] == ASCIIByte.lessThan { return nil }
             cursor += 1
         }
-        guard cursor < end, bytes[cursor] == ASCIIByte.greaterThan, cursor > destinationStart else { return nil }
+        guard cursor < end, bytes[cursor] == ASCIIByte.greaterThan else { return nil }
         return DestinationScan(
             range: destinationStart..<cursor,
             opening: start,
@@ -533,8 +535,10 @@ enum ReferenceDefinitionParser {
     }
 
     private static func scanTitle(bytes: [UInt8], from start: Int, end: Int) -> TitleScan? {
-        var index = skipHorizontalSpace(bytes, start, end)
-        guard index < end else { return TitleScan(range: nil, opening: nil, closing: nil) }
+        let indexAfterSpace = skipHorizontalSpace(bytes, start, end)
+        guard indexAfterSpace < end else { return TitleScan(range: nil, opening: nil, closing: nil) }
+        guard indexAfterSpace != start else { return nil }
+        var index = indexAfterSpace
         let marker = bytes[index]
         let closingMarker: UInt8
         if marker == ASCIIByte.quotationMark || marker == ASCIIByte.apostrophe {
@@ -621,7 +625,7 @@ private func isHashHeading(_ line: TextLine, bytes: [UInt8]) -> Bool {
         hashes += 1
         index += 1
     }
-    guard (1...6).contains(hashes) else { return false }
+    guard (1...MarkdownScanLimit.maximumHeadingLevel).contains(hashes) else { return false }
     if index == slice.endIndex { return true }
     return slice[index].isHorizontalSpace
 }
@@ -639,7 +643,7 @@ private func openingFence(_ line: TextLine, bytes: [UInt8]) -> (marker: UInt8, l
         length += 1
         index += 1
     }
-    guard length >= 3 else { return nil }
+    guard length >= MarkdownScanLimit.minimumMarkerRun else { return nil }
     if marker == ASCIIByte.backtick {
         while index < slice.endIndex {
             if slice[index] == ASCIIByte.backtick { return nil }
@@ -688,7 +692,7 @@ private func isThematic(_ line: TextLine, bytes: [UInt8]) -> Bool {
         }
         index += 1
     }
-    return count >= 3
+    return count >= MarkdownScanLimit.minimumMarkerRun
 }
 
 private func underlineHeadingLevel(_ line: TextLine, bytes: [UInt8]) -> Int? {
@@ -745,7 +749,7 @@ private func isList(_ line: TextLine, bytes: [UInt8]) -> Bool {
 
 private func isIndentedCode(_ line: TextLine, bytes: [UInt8]) -> Bool {
     let lead = leadingWhitespace(content(line, bytes))
-    return lead.columns >= 4 && !isBlank(line, bytes: bytes)
+    return lead.columns >= MarkdownScanLimit.codeBlockIndent && !isBlank(line, bytes: bytes)
 }
 
 private func containsPipe(_ line: TextLine, bytes: [UInt8]) -> Bool {

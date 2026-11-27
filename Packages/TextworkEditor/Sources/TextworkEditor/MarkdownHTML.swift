@@ -454,5 +454,7 @@ func containsControlCharacter(_ string: String) -> Bool {
 
 func isASCIILetter(_ character: Character) -> Bool {
     guard let value = character.asciiValue else { return false }
-    return (value >= 65 && value <= 90) || (value >= 97 && value <= 122)
+    let isUppercase = value >= ASCIIByte.uppercaseA && value <= ASCIIByte.uppercaseZ
+    let isLowercase = value >= ASCIIByte.lowercaseA && value <= ASCIIByte.lowercaseZ
+    return isUppercase || isLowercase
 }

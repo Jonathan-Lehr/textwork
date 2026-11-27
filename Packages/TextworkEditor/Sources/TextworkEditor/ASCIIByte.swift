@@ -77,8 +77,10 @@ enum MarkdownScanLimit {
     /// A tab is four columns wide.
     static let tabColumnWidth = 4
     static let maximumHeadingLevel = 6
-    /// CommonMark reference labels are at most 999 characters.
+    /// CommonMark reference labels contain at most 999 Unicode scalars.
     static let maximumReferenceLabelLength = 999
+    /// A fence or a thematic break needs at least three marker characters.
+    static let minimumMarkerRun = 3
     /// An ordered-list marker holds at most nine digits.
     static let maximumOrderedListMarkerDigits = 9
     /// CommonMark autolink schemes are at most 32 characters.
