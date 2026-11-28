@@ -21,55 +21,42 @@ final class MarkdownSourceTextView: NSTextView {
             return
         }
         let origin = min(NSMaxRange(selectedRange()), length)
-        var searchStart = origin
-        var hasWrapped = false
-        var previousStart = -1
-        while true {
-            if searchStart == previousStart {
-                NSSound.beep()
-                return
-            }
-            previousStart = searchStart
-            let found = NSSpellChecker.shared.checkSpelling(
-                of: string,
-                startingAt: searchStart,
-                language: nil,
-                wrap: false,
-                inSpellDocumentWithTag: spellCheckerDocumentTag,
-                wordCount: nil
-            )
-            if found.location == NSNotFound || found.length <= 0 {
-                if hasWrapped {
-                    NSSound.beep()
-                    return
-                }
-                hasWrapped = true
-                searchStart = 0
-                continue
-            }
-            if hasWrapped, found.location >= origin {
-                NSSound.beep()
-                return
-            }
-            let swiftRange = found.location..<(found.location + found.length)
-            if !SpellingExclusion.covers(swiftRange, exclusions: spellingExclusions) {
-                let word = storage.substring(with: found)
-                NSSpellChecker.shared.updateSpellingPanel(withMisspelledWord: word)
-                setSelectedRange(found)
-                scrollRangeToVisible(found)
-                return
-            }
-            let next = NSMaxRange(found)
-            if next <= searchStart {
-                NSSound.beep()
-                return
-            }
-            if hasWrapped, next >= origin {
-                NSSound.beep()
-                return
-            }
-            searchStart = next
+        if let found = nextMisspelling(from: origin, until: length) {
+            selectMisspelling(found, in: storage)
+            return
         }
+        if origin > 0, let found = nextMisspelling(from: 0, until: origin) {
+            selectMisspelling(found, in: storage)
+            return
+        }
+        NSSound.beep()
+    }
+
+    private func nextMisspelling(from start: Int, until end: Int) -> NSRange? {
+        guard end > start else { return nil }
+        let results = NSSpellChecker.shared.check(
+            string,
+            range: NSRange(location: start, length: end - start),
+            types: NSTextCheckingResult.CheckingType.spelling.rawValue,
+            options: nil,
+            inSpellDocumentWithTag: spellCheckerDocumentTag,
+            orthography: nil,
+            wordCount: nil
+        )
+        for result in results where result.resultType.contains(.spelling) {
+            let range = result.range
+            guard range.location != NSNotFound, range.length > 0 else { continue }
+            let swiftRange = range.location..<(range.location + range.length)
+            if !SpellingExclusion.covers(swiftRange, exclusions: spellingExclusions) { return range }
+        }
+        return nil
+    }
+
+    private func selectMisspelling(_ range: NSRange, in storage: NSString) {
+        let word = storage.substring(with: range)
+        NSSpellChecker.shared.updateSpellingPanel(withMisspelledWord: word)
+        setSelectedRange(range)
+        scrollRangeToVisible(range)
     }
 }
 #endif
