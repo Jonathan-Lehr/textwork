@@ -1,6 +1,24 @@
 import AppKit
+import ObjectiveC
 import SwiftUI
 import XCTest
+
+nonisolated(unsafe) private var spellingPanelUpdates = 0
+nonisolated(unsafe) private var didCountSpellingPanelUpdates = false
+
+private func installSpellingPanelUpdateCounter() {
+    guard !didCountSpellingPanelUpdates else { return }
+    didCountSpellingPanelUpdates = true
+    let selector = #selector(NSSpellChecker.updateSpellingPanel(withMisspelledWord:))
+    guard let method = class_getInstanceMethod(NSSpellChecker.self, selector) else { return }
+    let original = method_getImplementation(method)
+    let block: @convention(block) (NSSpellChecker, NSString) -> Void = { checker, word in
+        spellingPanelUpdates += 1
+        typealias Updater = @convention(c) (NSSpellChecker, Selector, NSString) -> Void
+        unsafeBitCast(original, to: Updater.self)(checker, selector, word)
+    }
+    method_setImplementation(method, imp_implementationWithBlock(block))
+}
 
 @MainActor
 final class SpellingTests: XCTestCase {
@@ -191,6 +209,36 @@ final class SpellingTests: XCTestCase {
         XCTAssertTrue(titles.contains("mistake"), "titles \(titles)")
         XCTAssertTrue(titles.contains("Learn Spelling"), "titles \(titles)")
         XCTAssertTrue(titles.contains("Ignore Spelling"), "titles \(titles)")
+    }
+
+    func testCheckSpellingAdvancesPastCodeAndDoesNotReportTheCurrentWordAgain() {
+        let source = "zzzzqqq then `qqqqjjj` then yyyyrrr."
+        let textView = makeWindowedEditor(source)
+        defer { textView.window?.close() }
+        let storage = source as NSString
+        let first = storage.range(of: "zzzzqqq")
+        let second = storage.range(of: "yyyyrrr")
+        let code = storage.range(of: "qqqqjjj")
+
+        textView.setSelectedRange(NSRange(location: 0, length: 0))
+        textView.checkSpelling(nil)
+        XCTAssertEqual(textView.selectedRange(), first)
+        textView.checkSpelling(nil)
+        XCTAssertEqual(textView.selectedRange(), second)
+        XCTAssertNotEqual(textView.selectedRange(), code)
+        textView.checkSpelling(nil)
+        XCTAssertEqual(textView.selectedRange(), first)
+
+        let only = "`qqqqjjj` yyyyrrr"
+        let onlyView = makeWindowedEditor(only)
+        defer { onlyView.window?.close() }
+        let current = (only as NSString).range(of: "yyyyrrr")
+        onlyView.setSelectedRange(current)
+        installSpellingPanelUpdateCounter()
+        spellingPanelUpdates = 0
+        onlyView.checkSpelling(nil)
+        XCTAssertEqual(onlyView.selectedRange(), current)
+        XCTAssertEqual(spellingPanelUpdates, 0)
     }
 
     private func makeWindowedEditor(_ text: String) -> MarkdownSourceTextView {
