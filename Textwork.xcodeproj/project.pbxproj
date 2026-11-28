@@ -20,7 +20,7 @@
 		BB0000000000000000000004 /* Exceptions for "App" folder in "TextworkTests" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				Assets.xcassets,
+				AppIcon.icon,
 				TextworkApp.swift,
 			);
 			target = BB0000000000000000000007 /* TextworkTests */;
