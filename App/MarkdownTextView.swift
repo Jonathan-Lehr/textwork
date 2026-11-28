@@ -64,8 +64,10 @@ struct MarkdownTextEditor: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let textView = NSTextView(usingTextLayoutManager: true)
+        let textView = MarkdownSourceTextView(usingTextLayoutManager: true)
         configuration.apply(to: textView)
+        configuration.enableContinuousSpellChecking(on: textView)
+        textView.delegate = context.coordinator
         textView.textStorage?.delegate = context.coordinator
         context.coordinator.textView = textView
 
@@ -81,6 +83,7 @@ struct MarkdownTextEditor: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
         context.coordinator.textView = textView
+        textView.delegate = context.coordinator
         if context.coordinator.configuration != configuration {
             context.coordinator.configuration = configuration
             configuration.apply(to: textView)
@@ -91,19 +94,23 @@ struct MarkdownTextEditor: NSViewRepresentable {
     }
 
     @MainActor
-    final class Coordinator: NSObject, NSTextStorageDelegate {
+    final class Coordinator: NSObject, NSTextStorageDelegate, NSTextViewDelegate {
         @Binding var text: String
         let highlighter = MarkdownHighlighter()
         var configuration: EditorConfiguration
         var snapshot: HighlightSnapshot
+        var spellingExclusions: [Range<Int>]
         var isApplyingHighlight = false
         private var isTypingAttributesResetPending = false
+        private var isSpellingCleanupPending = false
+        private var pendingSpellingCleanup: [Range<Int>] = []
         weak var textView: NSTextView?
 
         init(text: Binding<String>, configuration: EditorConfiguration) {
             _text = text
             self.configuration = configuration
             snapshot = highlighter.highlight(text.wrappedValue)
+            spellingExclusions = SpellingExclusion.ranges(in: snapshot)
         }
 
         func repaint(in textView: NSTextView) {
@@ -118,9 +125,12 @@ struct MarkdownTextEditor: NSViewRepresentable {
             isApplyingHighlight = true
             storage.setAttributedString(NSAttributedString(string: replacement))
             snapshot = highlighter.highlight(replacement)
-            paint(snapshot.spans, ranges: snapshot.invalidatedUTF16Ranges, in: storage, textView: textView)
+            noteSpellingExclusions()
+            let invalidated = snapshot.invalidatedUTF16Ranges
+            paint(snapshot.spans, ranges: invalidated, in: storage, textView: textView)
             isApplyingHighlight = false
             applyTypingAttributes()
+            scheduleSpellingCleanup(limits: invalidated)
         }
 
         /// TextKit calls this on the main thread while the storage is still
@@ -149,10 +159,13 @@ struct MarkdownTextEditor: NSViewRepresentable {
         private func finishProcessedEditing(oldRange: Range<Int>, replacement: String) {
             guard !isApplyingHighlight, let textView, let storage = textView.textStorage else { return }
             snapshot = highlighter.apply(MarkdownEdit(range: oldRange, replacement: replacement), to: snapshot)
+            noteSpellingExclusions()
+            let invalidated = snapshot.invalidatedUTF16Ranges
             isApplyingHighlight = true
-            paint(snapshot.spans, ranges: snapshot.invalidatedUTF16Ranges, in: storage, textView: textView)
+            paint(snapshot.spans, ranges: invalidated, in: storage, textView: textView)
             isApplyingHighlight = false
             resetTypingAttributesAfterEdit()
+            scheduleSpellingCleanup(limits: invalidated)
             text = storage.string
         }
 
@@ -208,6 +221,58 @@ struct MarkdownTextEditor: NSViewRepresentable {
             let desired = configuration.baseAttributes()
             guard !typingAttributesMatch(textView.typingAttributes, desired) else { return }
             textView.typingAttributes = desired
+        }
+
+        func textView(
+            _ view: NSTextView,
+            didCheckTextIn range: NSRange,
+            types checkingTypes: NSTextCheckingTypes,
+            options: [NSSpellChecker.OptionKey: Any] = [:],
+            results: [NSTextCheckingResult],
+            orthography: NSOrthography,
+            wordCount: Int
+        ) -> [NSTextCheckingResult] {
+            SpellingExclusion.includedCheckingResults(results, skipping: spellingExclusions)
+        }
+
+        func textView(_ textView: NSTextView, shouldSetSpellingState value: Int, range: NSRange) -> Int {
+            guard range.location != NSNotFound, range.length > 0 else { return value }
+            let end = range.location + range.length
+            guard end >= range.location else { return value }
+            if SpellingExclusion.covers(range.location..<end, exclusions: spellingExclusions) { return 0 }
+            return value
+        }
+
+        private func noteSpellingExclusions() {
+            spellingExclusions = SpellingExclusion.ranges(in: snapshot)
+            if let source = textView as? MarkdownSourceTextView {
+                source.spellingExclusions = spellingExclusions
+            }
+        }
+
+        private func scheduleSpellingCleanup(limits: [Range<Int>]) {
+            pendingSpellingCleanup.append(contentsOf: limits)
+            guard !isSpellingCleanupPending else { return }
+            isSpellingCleanupPending = true
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.isSpellingCleanupPending = false
+                    let limits = self.pendingSpellingCleanup
+                    self.pendingSpellingCleanup = []
+                    guard let textView = self.textView else { return }
+                    self.clearSpellingMarks(intersecting: limits, in: textView)
+                }
+            }
+        }
+
+        private func clearSpellingMarks(intersecting limits: [Range<Int>], in textView: NSTextView) {
+            let length = (textView.string as NSString).length
+            for exclusion in spellingExclusions {
+                let overlapsLimit = limits.contains { $0.overlaps(exclusion) }
+                guard overlapsLimit, let nsRange = clampedRange(exclusion, length: length) else { continue }
+                textView.setSpellingState(0, range: nsRange)
+            }
         }
     }
 }

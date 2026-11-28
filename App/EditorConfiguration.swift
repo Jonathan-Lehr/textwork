@@ -109,13 +109,6 @@ extension EditorConfiguration {
         textView.isAutomaticDataDetectionEnabled = allowsAutomaticSubstitution
         textView.isAutomaticLinkDetectionEnabled = allowsAutomaticSubstitution
         textView.isAutomaticTextReplacementEnabled = allowsAutomaticSubstitution
-        textView.isAutomaticSpellingCorrectionEnabled = allowsSpellingCorrection
-        textView.isContinuousSpellCheckingEnabled = allowsSpellingCorrection
-        if allowsSpellingCorrection {
-            textView.enabledTextCheckingTypes = NSTextCheckingTypes(NSTextCheckingResult.CheckingType.spelling.rawValue)
-        } else {
-            textView.enabledTextCheckingTypes = 0
-        }
         textView.font = bodyFont()
         textView.textColor = theme.bodyPlatformColor
         textView.defaultParagraphStyle = paragraphStyle()
@@ -131,6 +124,28 @@ extension EditorConfiguration {
             width: 0,
             height: CGFloat.greatestFiniteMagnitude
         )
+    }
+
+    /// Turns on check-as-you-type underlines without rewriting words.
+    ///
+    /// Called once when the text view is created. Later typography updates go
+    /// through ``apply(to:)`` and leave the Spelling and Grammar toggles alone.
+    @MainActor
+    func enableContinuousSpellChecking(on textView: NSTextView) {
+        let spelling = NSTextCheckingResult.CheckingType.spelling.rawValue
+        var types = NSTextCheckingTypes(spelling)
+        if allowsSpellingCorrection {
+            types |= NSTextCheckingTypes(NSTextCheckingResult.CheckingType.correction.rawValue)
+        }
+        textView.enabledTextCheckingTypes = types
+        textView.isGrammarCheckingEnabled = false
+        textView.isAutomaticSpellingCorrectionEnabled = allowsSpellingCorrection
+        textView.isContinuousSpellCheckingEnabled = true
+        textView.isAutomaticQuoteSubstitutionEnabled = allowsAutomaticSubstitution
+        textView.isAutomaticDashSubstitutionEnabled = allowsAutomaticSubstitution
+        textView.isAutomaticDataDetectionEnabled = allowsAutomaticSubstitution
+        textView.isAutomaticLinkDetectionEnabled = allowsAutomaticSubstitution
+        textView.isAutomaticTextReplacementEnabled = allowsAutomaticSubstitution
     }
 
     func baseAttributes() -> [NSAttributedString.Key: Any] {
