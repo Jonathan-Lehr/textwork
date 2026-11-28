@@ -20,6 +20,7 @@ struct EditorScreen: View {
         )
         .onAppear {
             AppearancePreference.stored().applyToApplication()
+            SpellingMenu.start()
         }
         .focusedSceneValue(
             \.documentExportSource,
