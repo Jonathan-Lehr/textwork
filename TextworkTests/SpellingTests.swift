@@ -84,6 +84,33 @@ final class SpellingTests: XCTestCase {
         XCTAssertNotNil(installed.first?.submenu?.item(withTitle: "Check Spelling While Typing"))
     }
 
+    func testSpellingMenuSurvivesTheRebuildWhenTheEditMenuOpens() {
+        let previous = NSApp.mainMenu
+        defer { NSApp.mainMenu = previous }
+        let main = NSMenu()
+        let editItem = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
+        let edit = NSMenu(title: "Edit")
+        edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editItem.submenu = edit
+        main.addItem(editItem)
+        NSApp.mainMenu = main
+        SpellingMenu.start()
+
+        let delegate = RebuildingEditMenuDelegate()
+        edit.delegate = delegate
+        SpellingMenu.installIfNeeded()
+        XCTAssertNotNil(edit.item(withTitle: "Spelling and Grammar"))
+
+        edit.delegate?.menuNeedsUpdate?(edit)
+        edit.delegate?.menuWillOpen?(edit)
+
+        let installed = edit.items.filter { $0.title == "Spelling and Grammar" }
+        XCTAssertEqual(installed.count, 1)
+        XCTAssertEqual(delegate.rebuilds, 1)
+        edit.delegate?.menuNeedsUpdate?(edit)
+        XCTAssertEqual(edit.items.filter { $0.title == "Spelling and Grammar" }.count, 1)
+    }
+
     func testDelegateDropsMisspellingsInsideCode() {
         documentText = "misstake and `misstake`"
         let editor = MarkdownTextEditor(text: Binding(get: { self.documentText }, set: { self.documentText = $0 }))
@@ -261,5 +288,18 @@ final class SpellingTests: XCTestCase {
             titles.append(contentsOf: menuItemTitles(in: item.submenu))
         }
         return titles
+    }
+}
+
+private final class RebuildingEditMenuDelegate: NSObject, NSMenuDelegate {
+    private(set) var rebuilds = 0
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        rebuilds += 1
+        guard rebuilds == 1 else { return }
+        let selectAll = menu.item(withTitle: "Select All")
+            ?? NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        menu.removeAllItems()
+        menu.addItem(selectAll)
     }
 }

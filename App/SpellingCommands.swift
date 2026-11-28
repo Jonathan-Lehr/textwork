@@ -1,27 +1,30 @@
 #if os(macOS)
 import AppKit
+import ObjectiveC
 
 @MainActor
 enum SpellingMenu {
-    private static var isObservingMenuTracking = false
+    nonisolated(unsafe) private static var wrapsDelegates = false
+    nonisolated(unsafe) private static var isInstalling = false
+    nonisolated(unsafe) private static let proxies = NSMapTable<NSMenu, SpellingMenuDelegate>.weakToStrongObjects()
 
     static func start() {
-        if !isObservingMenuTracking {
-            isObservingMenuTracking = true
-            NotificationCenter.default.addObserver(
-                forName: NSMenu.didBeginTrackingNotification,
-                object: nil,
-                queue: .main
-            ) { _ in
-                MainActor.assumeIsolated {
-                    installIfNeeded()
-                }
-            }
+        installDelegateHook()
+        wrapsDelegates = true
+        guard let mainMenu = NSApp.mainMenu else { return }
+        prepare(mainMenu)
+        for item in mainMenu.items {
+            if let submenu = item.submenu { prepare(submenu) }
         }
-        installIfNeeded()
     }
 
+    /// SwiftUI refills the Edit menu in its delegate the first time a document is key.
+    /// That refill runs after tracking begins and drops anything inserted earlier, so the
+    /// item has to be added again once the delegate has finished and before the menu is shown.
     static func installIfNeeded() {
+        if isInstalling { return }
+        isInstalling = true
+        defer { isInstalling = false }
         guard let edit = editMenu() else { return }
         if edit.items.contains(where: { $0.title == menuTitle }) { return }
         let item = NSMenuItem(title: menuTitle, action: nil, keyEquivalent: "")
@@ -69,6 +72,37 @@ enum SpellingMenu {
         return menu
     }
 
+    nonisolated fileprivate static func delegateToInstall(on menu: NSMenu, requested: NSMenuDelegate?) -> NSMenuDelegate? {
+        guard wrapsDelegates, let requested, !(requested is SpellingMenuDelegate) else {
+            if requested == nil { proxies.removeObject(forKey: menu) }
+            return requested
+        }
+        return proxy(forwarding: requested, for: menu)
+    }
+
+    private static func prepare(_ menu: NSMenu) {
+        if menu.delegate is SpellingMenuDelegate { return }
+        menu.delegate = proxy(forwarding: menu.delegate, for: menu)
+    }
+
+    nonisolated private static func proxy(forwarding: NSMenuDelegate?, for menu: NSMenu) -> SpellingMenuDelegate {
+        let proxy = SpellingMenuDelegate(forwarding: forwarding)
+        proxies.setObject(proxy, forKey: menu)
+        return proxy
+    }
+
+    private static func installDelegateHook() {
+        guard !wrapsDelegates else { return }
+        let selector = #selector(setter: NSMenu.delegate)
+        guard let method = class_getInstanceMethod(NSMenu.self, selector) else { return }
+        let original = method_getImplementation(method)
+        let block: @convention(block) (NSMenu, NSMenuDelegate?) -> Void = { menu, delegate in
+            let installed = delegateToInstall(on: menu, requested: delegate)
+            unsafeBitCast(original, to: DelegateSetter.self)(menu, selector, installed)
+        }
+        method_setImplementation(method, imp_implementationWithBlock(block))
+    }
+
     private static let menuTitle = "Spelling and Grammar"
 
     private static func editMenu() -> NSMenu? {
@@ -78,6 +112,36 @@ enum SpellingMenu {
             if submenu.items.contains(where: { $0.action == #selector(NSText.selectAll(_:)) }) { return submenu }
         }
         return mainMenu.item(withTitle: "Edit")?.submenu
+    }
+}
+
+private typealias DelegateSetter = @convention(c) (NSMenu, Selector, NSMenuDelegate?) -> Void
+
+private final class SpellingMenuDelegate: NSObject, NSMenuDelegate {
+    let forwarding: NSMenuDelegate?
+
+    init(forwarding: NSMenuDelegate?) {
+        self.forwarding = forwarding
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        forwarding?.menuNeedsUpdate?(menu)
+        SpellingMenu.installIfNeeded()
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        forwarding?.menuWillOpen?(menu)
+        SpellingMenu.installIfNeeded()
+    }
+
+    override func responds(to selector: Selector!) -> Bool {
+        if super.responds(to: selector) { return true }
+        return forwarding?.responds(to: selector) ?? false
+    }
+
+    override func forwardingTarget(for selector: Selector!) -> Any? {
+        if super.responds(to: selector) { return nil }
+        return forwarding
     }
 }
 #endif
